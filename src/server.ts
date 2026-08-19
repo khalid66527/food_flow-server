@@ -8,7 +8,7 @@ async function main() {
       await mongoose.connect(config.database_url as string);
       console.log('Successfully connected to MongoDB Database');
     } else {
-      console.warn('MongoDB connection skipped: Please update DATABASE_URL in .env with your real connection string.');
+      console.warn('MongoDB connection skipped: Please update MONGODB_URI in .env with your real connection string.');
     }
   } catch (err) {
     console.error('Failed to connect to MongoDB:', err);
