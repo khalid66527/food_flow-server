@@ -1,22 +1,51 @@
-import mongoose from 'mongoose';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 import app from './app';
-import config from './app/config';
+import dotenv from 'dotenv';
 
-async function main() {
-  try {
-    if (config.database_url && !config.database_url.includes('username:password')) {
-      await mongoose.connect(config.database_url as string);
-      console.log('Successfully connected to MongoDB Database');
-    } else {
-      console.warn('MongoDB connection skipped: Please update MONGODB_URI in .env with your real connection string.');
-    }
-  } catch (err) {
-    console.error('Failed to connect to MongoDB:', err);
-  }
+dotenv.config();
 
-  app.listen(config.port, () => {
-    console.log(`Food Flow Server running on port ${config.port}`);
-  });
+const port = process.env.PORT || 5000;
+const uri = process.env.MONGODB_URI;
+
+if (!uri) {
+  console.error('MONGODB_URI is not defined in .env file.');
+  process.exit(1);
 }
 
-main();
+// Create a MongoClient
+export const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+
+// Database & Restaurant Collection
+export const db = client.db(process.env.DB_NAME || 'food-delivery-platform');
+export const restaurantCollection = db.collection('restaurant');
+
+
+
+
+
+
+async function run() {
+  try {
+    // Connect to MongoDB
+    await client.connect();
+    await db.command({ ping: 1 });
+    console.log('🌿 Successfully connected to MongoDB Database!');
+
+    if (process.env.VERCEL !== '1') {
+      app.listen(port, () => {
+        console.log(`🚀 Food Flow Server is running on http://localhost:${port}`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    process.exit(1);
+  }
+}
+
+run().catch(console.dir);
