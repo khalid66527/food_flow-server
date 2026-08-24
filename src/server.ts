@@ -1,51 +1,25 @@
-import { MongoClient, ServerApiVersion } from 'mongodb';
 import app from './app';
-import dotenv from 'dotenv';
+import config from './app/config';
+import { connectDB, client, db, restaurantCollection } from './app/config/db';
 
-dotenv.config();
+// Re-exporting for backward compatibility if needed
+export { client, db, restaurantCollection };
 
-const port = process.env.PORT || 5000;
-const uri = process.env.MONGODB_URI;
-
-if (!uri) {
-  console.error('MONGODB_URI is not defined in .env file.');
-  process.exit(1);
-}
-
-// Create a MongoClient
-export const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
-
-// Database & Restaurant Collection
-export const db = client.db(process.env.DB_NAME || 'food-delivery-platform');
-export const restaurantCollection = db.collection('restaurant');
-
-
-
-
-
-
-async function run() {
+async function bootstrap() {
   try {
     // Connect to MongoDB
-    await client.connect();
-    await db.command({ ping: 1 });
-    console.log('🌿 Successfully connected to MongoDB Database!');
+    await connectDB();
 
-    if (process.env.VERCEL !== '1') {
-      app.listen(port, () => {
-        console.log(`🚀 Food Flow Server is running on http://localhost:${port}`);
+    // Start Server (avoid double listening in Vercel serverless environment)
+    if (!config.is_vercel) {
+      app.listen(config.port, () => {
+        console.log(`🚀 Food Flow Server is running on http://localhost:${config.port}`);
       });
     }
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
+    console.error('❌ Server startup failed:', error);
     process.exit(1);
   }
 }
 
-run().catch(console.dir);
+bootstrap().catch(console.dir);
