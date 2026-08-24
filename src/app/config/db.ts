@@ -18,7 +18,7 @@ export const db: Db = client.db(config.db_name);
 
 // Database Collections
 export const restaurantCollection: Collection = db.collection('restaurant');
-
+export const foodCollection: Collection = db.collection('food');
 
 export async function connectDB() {
   try {

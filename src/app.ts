@@ -1,3 +1,7 @@
+// Optional: uncomment if you face network/DNS issues with MongoDB Atlas
+const dns = require("node:dns");
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import router from './app/routes';
@@ -28,8 +32,9 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Application API Routes (/api/restaurants, /api/admin, /api/rider, /api/customer)
+// Application API Routes (/api/restaurants, /api/v1/restaurants, /api/admin, etc.)
 app.use('/api', router);
+app.use('/api/v1', router);
 
 // 404 Not Found Handler
 app.use((req: Request, res: Response) => {
