@@ -9,4 +9,5 @@ export default {
   mongodb_uri: process.env.MONGODB_URI,
   db_name: process.env.DB_NAME || 'food-delivery-platform',
   is_vercel: process.env.VERCEL === '1',
+  gemini_api_key: process.env.GEMINI_API_KEY || '',
 };
