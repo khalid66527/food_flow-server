@@ -30,13 +30,18 @@ const createRestaurant = async (req: Request, res: Response): Promise<void> => {
 const getMyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const ownerEmail =
-      (req.query.ownerEmail as string) || (req.headers['x-user-email'] as string);
-    const ownerId = (req.query.ownerId as string) || (req.headers['x-user-id'] as string);
+      (req.query.ownerEmail as string) ||
+      (req.query.email as string) ||
+      (req.headers['x-user-email'] as string);
+    const ownerId =
+      (req.query.ownerId as string) ||
+      (req.query.id as string) ||
+      (req.headers['x-user-id'] as string);
 
     const restaurant = await RestaurantService.getMyRestaurantProfile(ownerEmail, ownerId);
 
     if (!restaurant) {
-      res.status(404).json({
+      res.status(200).json({
         success: false,
         message: 'No restaurant found for this account',
         data: null,
@@ -61,6 +66,7 @@ const updateMyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const ownerEmail =
       (req.query.ownerEmail as string) ||
+      (req.query.email as string) ||
       (req.headers['x-user-email'] as string) ||
       req.body.ownerEmail ||
       req.body.contactEmail;
@@ -90,8 +96,15 @@ const updateMyProfile = async (req: Request, res: Response): Promise<void> => {
 
 const toggleStatus = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { ownerEmail, isOpen } = req.body;
-    const result = await RestaurantService.toggleRestaurantStatus(ownerEmail, isOpen);
+    const { ownerEmail, email, isOpen } = req.body;
+    const targetEmail =
+      ownerEmail ||
+      email ||
+      (req.query.ownerEmail as string) ||
+      (req.query.email as string) ||
+      (req.headers['x-user-email'] as string);
+
+    const result = await RestaurantService.toggleRestaurantStatus(targetEmail, isOpen);
 
     if (!result) {
       res.status(404).json({
