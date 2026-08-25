@@ -1,13 +1,23 @@
 import { ObjectId } from 'mongodb';
-import { restaurantCollection } from '../../config/db';
-import { TRestaurant, TRestaurantQueryParams } from './restaurant.interface';
-import { generateSlug } from './restaurant.utils';
+import { restaurantCollection, foodCollection } from '../../config/db';
+import {
+  TRestaurant,
+  TRestaurantQueryParams,
+  IPaginationMeta,
+} from './restaurant.interface';
+import {
+  generateSlug,
+  buildRestaurantMongoQuery,
+  buildRestaurantSortOptions,
+  normalizeRestaurantDoc,
+} from './restaurant.utils';
 
 /**
  * Create or Update Restaurant Profile
  */
 const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
-  if (!payload?.restaurantName) {
+  const restaurantName = payload.restaurantName || payload.name;
+  if (!restaurantName) {
     throw new Error('Restaurant Name is required.');
   }
 
@@ -29,32 +39,42 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
         { $set: { ...restPayload, contactEmail, updatedAt: new Date().toISOString() } },
         { returnDocument: 'after' }
       );
-      return { isUpdated: true, data: updateResult };
+      return { isUpdated: true, data: normalizeRestaurantDoc(updateResult) };
     }
   }
 
+  const cuisines =
+    Array.isArray(payload.cuisines) && payload.cuisines.length > 0
+      ? payload.cuisines
+      : Array.isArray(payload.cuisineTypes) && payload.cuisineTypes.length > 0
+      ? payload.cuisineTypes
+      : [];
+
   const restaurantDoc: Record<string, any> = {
     ...payload,
-    restaurantName: payload.restaurantName,
+    restaurantName,
+    name: restaurantName,
     ownerEmail,
     ownerId: payload.ownerId || '',
     ownerName: payload.ownerName || '',
     ownerPhone: payload.ownerPhone || '',
-    slug: payload.slug || generateSlug(payload.restaurantName),
+    slug: payload.slug || generateSlug(restaurantName),
     tagline: payload.tagline || '',
     description: payload.description || '',
-    cuisineTypes: Array.isArray(payload.cuisineTypes) ? payload.cuisineTypes : [],
+    cuisineTypes: cuisines,
+    cuisines,
     logo: payload.logo || '',
-    bannerImage: payload.bannerImage || '',
+    bannerImage: payload.bannerImage || payload.logo || '',
     contactNumber: payload.contactNumber || '',
     contactEmail,
     website: payload.website || '',
     address: payload.address || {
       street: '',
-      city: '',
-      state: '',
+      city: 'Manhattan',
+      area: 'Downtown',
+      state: 'NY',
       postalCode: '',
-      country: 'Bangladesh',
+      country: 'USA',
     },
     openingHours: payload.openingHours,
     generalOpenTime: payload.generalOpenTime || '09:00 AM',
@@ -63,8 +83,9 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
       minOrderAmount: Number(payload.pricing?.minOrderAmount || payload.minOrderAmount) || 0,
       deliveryFee: Number(payload.pricing?.deliveryFee || payload.deliveryFee) || 0,
       estimatedDeliveryTime:
-        payload.pricing?.estimatedDeliveryTime || payload.estimatedDeliveryTime || '30-45 mins',
-      costForTwo: Number(payload.pricing?.costForTwo || payload.costForTwo) || 0,
+        payload.pricing?.estimatedDeliveryTime || '20-35 mins',
+      costForTwo: Number(payload.pricing?.costForTwo) || 0,
+      priceRange: payload.priceRange || payload.pricing?.priceRange || '$$',
     },
     features: {
       hasDelivery: true,
@@ -72,6 +93,8 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
       hasDineIn: false,
       isPureVeg: false,
       isHalal: true,
+      freeDelivery: payload.deliveryFee === 0,
+      openNow: true,
       ...payload.features,
     },
     socialLinks: {
@@ -81,11 +104,18 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
       website: '',
       ...payload.socialLinks,
     },
-    rating: 0,
-    totalReviews: 0,
+    rating: Number(payload.rating) || 4.5,
+    reviewCount: Number(payload.reviewCount || payload.totalReviews) || 0,
+    totalReviews: Number(payload.totalReviews || payload.reviewCount) || 0,
+    deliveryTimeMin: Number(payload.deliveryTimeMin) || 20,
+    deliveryTimeMax: Number(payload.deliveryTimeMax) || 35,
+    deliveryFee: Number(payload.deliveryFee) || 0,
+    minOrderAmount: Number(payload.minOrderAmount) || 0,
+    priceRange: payload.priceRange || '$$',
     isOpen: payload.isOpen ?? true,
     status: payload.status || 'active',
     isFeatured: payload.isFeatured ?? false,
+    discountOffer: payload.discountOffer || '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -93,7 +123,9 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
   delete restaurantDoc._id;
 
   const result = await restaurantCollection.insertOne(restaurantDoc);
-  return { isUpdated: false, data: { _id: result.insertedId, ...restaurantDoc } };
+  const createdDoc = { _id: result.insertedId, ...restaurantDoc };
+
+  return { isUpdated: false, data: normalizeRestaurantDoc(createdDoc) };
 };
 
 /**
@@ -120,7 +152,7 @@ const getMyRestaurantProfile = async (ownerEmail?: string, ownerId?: string) => 
     if (latest?.[0]) restaurant = latest[0];
   }
 
-  return restaurant;
+  return restaurant ? normalizeRestaurantDoc(restaurant) : null;
 };
 
 /**
@@ -157,7 +189,7 @@ const updateMyRestaurantProfile = async (
     { returnDocument: 'after' }
   );
 
-  return result;
+  return result ? normalizeRestaurantDoc(result) : null;
 };
 
 /**
@@ -188,54 +220,117 @@ const toggleRestaurantStatus = async (ownerEmail: string | undefined, isOpen: bo
     { returnDocument: 'after' }
   );
 
-  return result;
+  return result ? normalizeRestaurantDoc(result) : null;
 };
 
 /**
- * Get All Restaurants (with search, filter, pagination)
+ * Get All Restaurants for Explore Page (Search, Category, Filter, Sort, Pagination)
  */
 const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
-  const { search, cuisine, city, page = '1', limit = '10' } = queryParams;
+  const { page = 1, limit = 9, sortBy } = queryParams;
 
-  const filter: any = {};
-  if (search) {
-    filter.$or = ['restaurantName', 'tagline', 'description', 'cuisineTypes'].map((field) => ({
-      [field]: { $regex: search as string, $options: 'i' },
-    }));
-  }
-  if (cuisine) filter.cuisineTypes = { $in: [new RegExp(cuisine as string, 'i')] };
-  if (city) filter['address.city'] = { $regex: city as string, $options: 'i' };
+  const mongoQuery = buildRestaurantMongoQuery(queryParams);
+  const sortOptions = buildRestaurantSortOptions(sortBy as string);
 
-  const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-  const limitNum = Math.max(1, parseInt(limit as string, 10) || 10);
+  const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+  const limitNum = Math.max(1, parseInt(String(limit), 10) || 9);
   const skip = (pageNum - 1) * limitNum;
 
-  const [total, items] = await Promise.all([
-    restaurantCollection.countDocuments(filter),
-    restaurantCollection.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).toArray(),
+  const [totalItems, rawItems] = await Promise.all([
+    restaurantCollection.countDocuments(mongoQuery),
+    restaurantCollection
+      .find(mongoQuery)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limitNum)
+      .toArray(),
   ]);
 
+  const normalizedData = rawItems.map((doc) => normalizeRestaurantDoc(doc));
+  const totalPages = Math.ceil(totalItems / limitNum) || 0;
+
+  const pagination: IPaginationMeta = {
+    currentPage: pageNum,
+    totalPages,
+    totalItems,
+    itemsPerPage: limitNum,
+    hasNextPage: pageNum < totalPages,
+    hasPrevPage: pageNum > 1,
+  };
+
   return {
+    data: normalizedData,
+    pagination,
     meta: {
       page: pageNum,
       limit: limitNum,
-      total,
-      totalPage: Math.ceil(total / limitNum) || 1,
+      total: totalItems,
+      totalPage: totalPages || 1,
     },
-    data: items,
   };
 };
 
 /**
- * Get Single Restaurant by ID or Slug
+ * Add Food Item to Restaurant Menu
  */
-const getSingleRestaurant = async (idOrSlug: string) => {
-  const query = ObjectId.isValid(idOrSlug)
-    ? { $or: [{ _id: new ObjectId(idOrSlug) }, { slug: idOrSlug }] }
-    : { slug: idOrSlug };
+const addFoodItem = async (foodData: Record<string, any>) => {
+  const name = typeof foodData.name === 'string' ? foodData.name.trim() : '';
+  const price = Number(foodData.price);
 
-  const restaurant = await restaurantCollection.findOne(query);
-  return restaurant;
+  if (!name) {
+    throw new Error('Food Name is required.');
+  }
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error('Food Price must be a valid number greater than 0.');
+  }
+  if (!foodData.restaurantId || !String(foodData.restaurantId).trim()) {
+    throw new Error('Restaurant ID is required.');
+  }
+
+  // Status ("available" | "unavailable") maps to the isAvailable flag
+  let isAvailable: boolean;
+  if (typeof foodData.isAvailable === 'boolean') {
+    isAvailable = foodData.isAvailable;
+  } else if (typeof foodData.status === 'string') {
+    isAvailable = foodData.status.toLowerCase() !== 'unavailable';
+  } else {
+    isAvailable = true;
+  }
+  const status = isAvailable ? 'available' : 'unavailable';
+
+  const foodDoc = {
+    restaurantId: String(foodData.restaurantId).trim(),
+    name,
+    description: typeof foodData.description === 'string' ? foodData.description.trim() : '',
+    price,
+    discountPrice: foodData.discountPrice ? Number(foodData.discountPrice) : undefined,
+    category: (foodData.category || 'General').trim() || 'General',
+    image: typeof foodData.image === 'string' ? foodData.image.trim() : '',
+    status,
+    isAvailable,
+    isVegetarian: foodData.isVegetarian ?? false,
+    isSpicy: foodData.isSpicy ?? false,
+    tags: Array.isArray(foodData.tags) ? foodData.tags : [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = await foodCollection.insertOne(foodDoc);
+  return { _id: result.insertedId, ...foodDoc };
+};
+
+/**
+ * Get Food Menu Items for a Restaurant
+ */
+const getRestaurantMenu = async (restaurantId: string) => {
+  if (!restaurantId) return [];
+
+  const query = ObjectId.isValid(restaurantId)
+    ? { $or: [{ restaurantId }, { restaurantId: new ObjectId(restaurantId) }] }
+    : { restaurantId };
+
+  const items = await foodCollection.find(query).sort({ createdAt: -1 }).toArray();
+  return items;
 };
 
 export const RestaurantService = {
@@ -244,5 +339,6 @@ export const RestaurantService = {
   updateMyRestaurantProfile,
   toggleRestaurantStatus,
   getAllRestaurants,
-  getSingleRestaurant,
+  addFoodItem,
+  getRestaurantMenu,
 };

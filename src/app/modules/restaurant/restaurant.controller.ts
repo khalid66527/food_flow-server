@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { RestaurantService } from './restaurant.service';
+import { TRestaurantQueryParams } from './restaurant.interface';
 
 const createRestaurant = async (req: Request, res: Response): Promise<void> => {
   try {
     const payload = req.body;
-    if (!payload?.restaurantName) {
+    if (!payload?.restaurantName && !payload?.name) {
       res.status(400).json({ success: false, message: 'Restaurant Name is required.' });
       return;
     }
@@ -127,47 +128,101 @@ const toggleStatus = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+/**
+ * Get All Restaurants (Search, Filter, Sort, Pagination)
+ */
 const getAllRestaurants = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await RestaurantService.getAllRestaurants(req.query);
+    const queryParams: TRestaurantQueryParams = {
+      search: (req.query.search as string) || (req.query.searchQuery as string),
+      searchQuery: (req.query.searchQuery as string) || (req.query.search as string),
+      category: (req.query.category as string) || (req.query.cuisine as string),
+      cuisine: (req.query.cuisine as string) || (req.query.category as string),
+      restaurantId: req.query.restaurantId as string,
+      sortBy: req.query.sortBy as string,
+      priceRange: req.query.priceRange as string,
+      minRating: req.query.minRating as string,
+      freeDelivery: req.query.freeDelivery as string,
+      openNow: req.query.openNow as string,
+      featuredOnly: req.query.featuredOnly as string,
+      location: (req.query.location as string) || (req.query.city as string),
+      city: (req.query.city as string) || (req.query.location as string),
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    };
+
+    const result = await RestaurantService.getAllRestaurants(queryParams);
 
     res.status(200).json({
       success: true,
       message: 'Restaurants fetched successfully',
-      meta: result.meta,
       data: result.data,
+      pagination: result.pagination,
+      meta: result.meta,
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
       message: error?.message || 'Failed to fetch restaurants',
+      data: [],
     });
   }
 };
 
-const getSingleRestaurant = async (req: Request, res: Response): Promise<void> => {
+/**
+ * Add Food Item to Restaurant Menu
+ */
+const addFoodItem = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { idOrSlug } = req.params;
-    const restaurant = await RestaurantService.getSingleRestaurant(idOrSlug);
+    const { name, price, restaurantId } = req.body;
 
-    if (!restaurant) {
-      res.status(404).json({
-        success: false,
-        message: 'Restaurant not found',
-        data: null,
-      });
+    if (!name || !String(name).trim()) {
+      res.status(400).json({ success: false, message: 'Food Name is required.' });
+      return;
+    }
+    const priceNum = Number(price);
+    if (price === undefined || price === null || Number.isNaN(priceNum) || priceNum <= 0) {
+      res
+        .status(400)
+        .json({ success: false, message: 'Food Price must be a valid amount greater than 0.' });
+      return;
+    }
+    if (!restaurantId || !String(restaurantId).trim()) {
+      res.status(400).json({ success: false, message: 'Restaurant ID is required.' });
       return;
     }
 
+    const foodItem = await RestaurantService.addFoodItem(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Food item added successfully',
+      data: foodItem,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error?.message || 'Failed to add food item',
+    });
+  }
+};
+
+/**
+ * Get Restaurant Menu Items
+ */
+const getRestaurantMenu = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const items = await RestaurantService.getRestaurantMenu(restaurantId);
     res.status(200).json({
       success: true,
-      message: 'Restaurant fetched successfully',
-      data: restaurant,
+      message: 'Menu items fetched successfully',
+      data: items,
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error?.message || 'Failed to fetch restaurant',
+      message: error?.message || 'Failed to fetch menu items',
+      data: [],
     });
   }
 };
@@ -178,5 +233,6 @@ export const RestaurantController = {
   updateMyProfile,
   toggleStatus,
   getAllRestaurants,
-  getSingleRestaurant,
+  addFoodItem,
+  getRestaurantMenu,
 };
