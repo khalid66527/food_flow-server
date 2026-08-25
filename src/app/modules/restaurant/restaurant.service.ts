@@ -26,14 +26,17 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
 
   if (ownerEmail) {
     const existing = await restaurantCollection.findOne({
-      $or: [{ ownerEmail }, { contactEmail: ownerEmail }],
+      $or: [
+        { ownerEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+        { contactEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+      ],
     });
 
     if (existing) {
       const { _id, ...restPayload } = payload;
       const updateResult = await restaurantCollection.findOneAndUpdate(
         { _id: existing._id },
-        { $set: { ...restPayload, updatedAt: new Date().toISOString() } },
+        { $set: { ...restPayload, contactEmail, updatedAt: new Date().toISOString() } },
         { returnDocument: 'after' }
       );
       return { isUpdated: true, data: normalizeRestaurantDoc(updateResult) };
@@ -129,18 +132,22 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
  * Get My Restaurant Profile
  */
 const getMyRestaurantProfile = async (ownerEmail?: string, ownerId?: string) => {
-  const query: any =
-    ownerEmail && ownerId
-      ? { $or: [{ ownerEmail }, { contactEmail: ownerEmail }, { ownerId }] }
-      : ownerEmail
-      ? { $or: [{ ownerEmail }, { contactEmail: ownerEmail }] }
-      : ownerId
-      ? { ownerId }
-      : {};
+  const queryConditions: any[] = [];
+  if (ownerEmail) {
+    queryConditions.push({ ownerEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } });
+    queryConditions.push({ contactEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } });
+  }
+  if (ownerId) {
+    queryConditions.push({ ownerId });
+  }
 
-  let restaurant = Object.keys(query).length > 0 ? await restaurantCollection.findOne(query) : null;
+  let restaurant =
+    queryConditions.length > 0
+      ? await restaurantCollection.findOne({ $or: queryConditions })
+      : null;
 
-  if (!restaurant) {
+  // Fallback to latest restaurant if no specific query is given
+  if (!restaurant && !ownerEmail && !ownerId) {
     const latest = await restaurantCollection.find({}).sort({ createdAt: -1 }).limit(1).toArray();
     if (latest?.[0]) restaurant = latest[0];
   }
@@ -156,7 +163,12 @@ const updateMyRestaurantProfile = async (
   payload: Record<string, any>
 ) => {
   let query: any = ownerEmail
-    ? { $or: [{ ownerEmail }, { contactEmail: ownerEmail }] }
+    ? {
+        $or: [
+          { ownerEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+          { contactEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+        ],
+      }
     : null;
 
   if (!query) {
@@ -185,7 +197,12 @@ const updateMyRestaurantProfile = async (
  */
 const toggleRestaurantStatus = async (ownerEmail: string | undefined, isOpen: boolean) => {
   let query: any = ownerEmail
-    ? { $or: [{ ownerEmail }, { contactEmail: ownerEmail }] }
+    ? {
+        $or: [
+          { ownerEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+          { contactEmail: { $regex: new RegExp(`^${ownerEmail}$`, 'i') } },
+        ],
+      }
     : null;
 
   if (!query) {
