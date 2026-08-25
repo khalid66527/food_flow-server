@@ -254,36 +254,43 @@ const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
 };
 
 /**
- * Get Single Restaurant by ID or Slug
- */
-const getSingleRestaurant = async (idOrSlug: string) => {
-  if (!idOrSlug) return null;
-
-  const query = ObjectId.isValid(idOrSlug)
-    ? { $or: [{ _id: new ObjectId(idOrSlug) }, { slug: idOrSlug }] }
-    : { slug: idOrSlug };
-
-  const restaurant = await restaurantCollection.findOne(query);
-  return restaurant ? normalizeRestaurantDoc(restaurant) : null;
-};
-
-/**
  * Add Food Item to Restaurant Menu
  */
 const addFoodItem = async (foodData: Record<string, any>) => {
-  if (!foodData.name || !foodData.price || !foodData.restaurantId) {
-    throw new Error('Food Name, Price, and Restaurant ID are required.');
+  const name = typeof foodData.name === 'string' ? foodData.name.trim() : '';
+  const price = Number(foodData.price);
+
+  if (!name) {
+    throw new Error('Food Name is required.');
+  }
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error('Food Price must be a valid number greater than 0.');
+  }
+  if (!foodData.restaurantId || !String(foodData.restaurantId).trim()) {
+    throw new Error('Restaurant ID is required.');
   }
 
+  // Status ("available" | "unavailable") maps to the isAvailable flag
+  let isAvailable: boolean;
+  if (typeof foodData.isAvailable === 'boolean') {
+    isAvailable = foodData.isAvailable;
+  } else if (typeof foodData.status === 'string') {
+    isAvailable = foodData.status.toLowerCase() !== 'unavailable';
+  } else {
+    isAvailable = true;
+  }
+  const status = isAvailable ? 'available' : 'unavailable';
+
   const foodDoc = {
-    restaurantId: foodData.restaurantId,
-    name: foodData.name,
-    description: foodData.description || '',
-    price: Number(foodData.price) || 0,
+    restaurantId: String(foodData.restaurantId).trim(),
+    name,
+    description: typeof foodData.description === 'string' ? foodData.description.trim() : '',
+    price,
     discountPrice: foodData.discountPrice ? Number(foodData.discountPrice) : undefined,
-    category: foodData.category || 'General',
-    image: foodData.image || '',
-    isAvailable: foodData.isAvailable ?? true,
+    category: (foodData.category || 'General').trim() || 'General',
+    image: typeof foodData.image === 'string' ? foodData.image.trim() : '',
+    status,
+    isAvailable,
     isVegetarian: foodData.isVegetarian ?? false,
     isSpicy: foodData.isSpicy ?? false,
     tags: Array.isArray(foodData.tags) ? foodData.tags : [],
@@ -315,7 +322,6 @@ export const RestaurantService = {
   updateMyRestaurantProfile,
   toggleRestaurantStatus,
   getAllRestaurants,
-  getSingleRestaurant,
   addFoodItem,
   getRestaurantMenu,
 };

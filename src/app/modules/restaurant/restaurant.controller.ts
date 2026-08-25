@@ -157,45 +157,28 @@ const getAllRestaurants = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Get Single Restaurant by ID or Slug
- */
-const getSingleRestaurant = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { idOrSlug } = req.params;
-    if (!idOrSlug) {
-      res.status(400).json({ success: false, message: 'Restaurant ID or Slug is required' });
-      return;
-    }
-
-    const restaurant = await RestaurantService.getSingleRestaurant(idOrSlug);
-
-    if (!restaurant) {
-      res.status(404).json({
-        success: false,
-        message: 'Restaurant not found',
-        data: null,
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Restaurant fetched successfully',
-      data: restaurant,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error?.message || 'Failed to fetch restaurant',
-    });
-  }
-};
-
-/**
  * Add Food Item to Restaurant Menu
  */
 const addFoodItem = async (req: Request, res: Response): Promise<void> => {
   try {
+    const { name, price, restaurantId } = req.body;
+
+    if (!name || !String(name).trim()) {
+      res.status(400).json({ success: false, message: 'Food Name is required.' });
+      return;
+    }
+    const priceNum = Number(price);
+    if (price === undefined || price === null || Number.isNaN(priceNum) || priceNum <= 0) {
+      res
+        .status(400)
+        .json({ success: false, message: 'Food Price must be a valid amount greater than 0.' });
+      return;
+    }
+    if (!restaurantId || !String(restaurantId).trim()) {
+      res.status(400).json({ success: false, message: 'Restaurant ID is required.' });
+      return;
+    }
+
     const foodItem = await RestaurantService.addFoodItem(req.body);
     res.status(201).json({
       success: true,
@@ -237,7 +220,6 @@ export const RestaurantController = {
   updateMyProfile,
   toggleStatus,
   getAllRestaurants,
-  getSingleRestaurant,
   addFoodItem,
   getRestaurantMenu,
 };

@@ -1,5 +1,6 @@
 import express, { Router } from 'express';
 import { RestaurantRoutes } from '../modules/restaurant/restaurant.route';
+import { FoodRoutes } from '../modules/food/food.routes';
 import { AdminRoutes } from '../modules/admin/admin.route';
 import { RiderRoutes } from '../modules/rider/rider.route';
 import { CustomerRoutes } from '../modules/customer/customer.route';
@@ -10,6 +11,10 @@ const moduleRoutes = [
   {
     path: '/restaurants',
     route: RestaurantRoutes,
+  },
+  {
+    path: '/food',
+    route: FoodRoutes,
   },
   {
     path: '/admin',
