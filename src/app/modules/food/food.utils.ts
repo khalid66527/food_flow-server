@@ -115,6 +115,9 @@ export const normalizeFoodDoc = (doc: any): Record<string, any> => {
   const idStr = doc._id ? doc._id.toString() : doc.id || '';
   const restaurant = doc._restaurant?.[0] || {};
 
+  const mainImg = doc.image || (Array.isArray(doc.images) && doc.images[0]) || '';
+  const imagesList = Array.isArray(doc.images) && doc.images.length > 0 ? doc.images : mainImg ? [mainImg] : [];
+
   return {
     _id: idStr,
     restaurantId: doc.restaurantId?.toString?.() || doc.restaurantId || '',
@@ -123,12 +126,20 @@ export const normalizeFoodDoc = (doc: any): Record<string, any> => {
     price: Number(doc.price) || 0,
     discountPrice: doc.discountPrice ? Number(doc.discountPrice) : undefined,
     category: doc.category || 'General',
-    image: doc.image || '',
+    image: mainImg,
+    images: imagesList,
     status: doc.status || 'available',
     isAvailable: doc.isAvailable ?? true,
     isVegetarian: doc.isVegetarian ?? false,
     isSpicy: doc.isSpicy ?? false,
     tags: Array.isArray(doc.tags) ? doc.tags : [],
+    ingredients: Array.isArray(doc.ingredients) ? doc.ingredients : [],
+    sizeOptions: Array.isArray(doc.sizeOptions) ? doc.sizeOptions : [],
+    extras: Array.isArray(doc.extras) ? doc.extras : [],
+    categoryDetails:
+      typeof doc.categoryDetails === 'object' && doc.categoryDetails !== null
+        ? doc.categoryDetails
+        : {},
     restaurantName: restaurant.restaurantName || restaurant.name || 'Unknown Restaurant',
     restaurantSlug: restaurant.slug || '',
     restaurantLogo: restaurant.logo || '',
