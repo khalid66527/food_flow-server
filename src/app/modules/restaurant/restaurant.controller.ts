@@ -301,6 +301,64 @@ const deleteFoodItem = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+/**
+ * Get Single Food Item Details by ID
+ */
+const getFoodItemDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const foodItem = await RestaurantService.getFoodItemById(foodId);
+    if (!foodItem) {
+      res.status(404).json({
+        success: false,
+        message: 'Food item not found',
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Food item details fetched successfully',
+      data: foodItem,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to fetch food details',
+      data: null,
+    });
+  }
+};
+
+/**
+ * Get Single Restaurant Details by ID or Slug
+ */
+const getSingleRestaurant = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const restaurant = await RestaurantService.getSingleRestaurant(id);
+    if (!restaurant) {
+      res.status(404).json({
+        success: false,
+        message: 'Restaurant not found',
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant fetched successfully',
+      data: restaurant,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to fetch restaurant',
+      data: null,
+    });
+  }
+};
+
 export const RestaurantController = {
   createRestaurant,
   getMyProfile,
@@ -312,5 +370,7 @@ export const RestaurantController = {
   updateFoodItem,
   toggleFoodAvailability,
   deleteFoodItem,
+  getFoodItemDetails,
+  getSingleRestaurant,
 };
 

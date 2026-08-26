@@ -432,6 +432,72 @@ const deleteFoodItem = async (foodId: string) => {
   return result.deletedCount > 0;
 };
 
+/**
+ * Get Single Food Item Details by ID (with Restaurant Details Populated)
+ */
+const getFoodItemById = async (foodId: string) => {
+  if (!foodId) return null;
+
+  const query = ObjectId.isValid(foodId)
+    ? { $or: [{ _id: new ObjectId(foodId) }, { _id: foodId }] }
+    : { _id: foodId };
+
+  const foodDoc = await foodCollection.findOne(query);
+  if (!foodDoc) return null;
+
+  let restaurantDoc = null;
+  if (foodDoc.restaurantId) {
+    const restQuery = ObjectId.isValid(foodDoc.restaurantId)
+      ? {
+          $or: [
+            { _id: new ObjectId(foodDoc.restaurantId) },
+            { _id: String(foodDoc.restaurantId) },
+            { id: String(foodDoc.restaurantId) },
+          ],
+        }
+      : {
+          $or: [
+            { _id: String(foodDoc.restaurantId) },
+            { id: String(foodDoc.restaurantId) },
+          ],
+        };
+    restaurantDoc = await restaurantCollection.findOne(restQuery);
+  }
+
+  return {
+    ...foodDoc,
+    restaurant: restaurantDoc || null,
+  };
+};
+
+/**
+ * Get Single Restaurant Details by ID or Slug (with Menu)
+ */
+const getSingleRestaurant = async (idOrSlug: string) => {
+  if (!idOrSlug) return null;
+
+  const query = ObjectId.isValid(idOrSlug)
+    ? {
+        $or: [
+          { _id: new ObjectId(idOrSlug) },
+          { _id: idOrSlug },
+          { slug: idOrSlug },
+        ],
+      }
+    : { $or: [{ _id: idOrSlug }, { slug: idOrSlug }] };
+
+  const restaurantDoc = await restaurantCollection.findOne(query);
+  if (!restaurantDoc) return null;
+
+  const restId = String(restaurantDoc._id || restaurantDoc.id || idOrSlug);
+  const menuItems = await getRestaurantMenu(restId);
+
+  return {
+    ...restaurantDoc,
+    menu: menuItems,
+  };
+};
+
 export const RestaurantService = {
   createOrUpdateRestaurant,
   getMyRestaurantProfile,
@@ -443,5 +509,7 @@ export const RestaurantService = {
   updateFoodItem,
   toggleFoodAvailability,
   deleteFoodItem,
+  getFoodItemById,
+  getSingleRestaurant,
 };
 

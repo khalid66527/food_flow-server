@@ -16,6 +16,10 @@ const router: Router = express.Router();
 // 1. Add Food Item to Restaurant Menu
 router.post('/', RestaurantController.addFoodItem);
 
+// 1.1 Get Single Food Item Details (with restaurant info populated)
+router.get('/item/:foodId', RestaurantController.getFoodItemDetails);
+router.get('/single/:foodId', RestaurantController.getFoodItemDetails);
+
 // 2. Get Restaurant Menu Items
 router.get('/:restaurantId', RestaurantController.getRestaurantMenu);
 
