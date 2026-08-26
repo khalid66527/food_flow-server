@@ -35,8 +35,13 @@ Be clear and direct. Prioritize safety and efficiency in your guidance.`,
 Be professional and business-focused. Help restaurants maximize their efficiency on the platform.`,
 };
 
+const normalizeContent = (item: IChatMessage) => ({
+  role: item.role === 'assistant' ? 'model' : item.role === 'model' ? 'model' : 'user',
+  parts: [{ text: item.text || item.message || item.content || '' }],
+});
+
 const buildContents = (message: string, chatHistory?: IChatMessage[]) => {
-  const contents = chatHistory ? [...chatHistory] : [];
+  const contents = chatHistory ? chatHistory.map(normalizeContent) : [];
   contents.push({ role: 'user' as const, parts: [{ text: message }] });
   return contents;
 };

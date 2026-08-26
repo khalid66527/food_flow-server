@@ -1,8 +1,11 @@
 export type TUserRole = 'customer' | 'rider' | 'restaurant';
 
 export interface IChatMessage {
-  role: 'user' | 'model';
-  parts: { text: string }[];
+  role?: string;
+  parts?: { text: string }[];
+  text?: string;
+  message?: string;
+  content?: string;
 }
 
 export interface IChatRequest {
