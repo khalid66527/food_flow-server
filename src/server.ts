@@ -1,22 +1,25 @@
-import mongoose from 'mongoose';
 import app from './app';
 import config from './app/config';
+import { connectDB, client, db, restaurantCollection } from './app/config/db';
 
-async function main() {
+// Re-exporting for backward compatibility if needed
+export { client, db, restaurantCollection };
+
+async function bootstrap() {
   try {
-    if (config.database_url && !config.database_url.includes('username:password')) {
-      await mongoose.connect(config.database_url as string);
-      console.log('Successfully connected to MongoDB Database');
-    } else {
-      console.warn('MongoDB connection skipped: Please update MONGODB_URI in .env with your real connection string.');
-    }
-  } catch (err) {
-    console.error('Failed to connect to MongoDB:', err);
-  }
+    // Connect to MongoDB
+    await connectDB();
 
-  app.listen(config.port, () => {
-    console.log(`Food Flow Server running on port ${config.port}`);
-  });
+    // Start Server (avoid double listening in Vercel serverless environment)
+    if (!config.is_vercel) {
+      app.listen(config.port, () => {
+        console.log(`🚀 Food Flow Server is running on http://localhost:${config.port}`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Server startup failed:', error);
+    process.exit(1);
+  }
 }
 
-main();
+bootstrap().catch(console.dir);
