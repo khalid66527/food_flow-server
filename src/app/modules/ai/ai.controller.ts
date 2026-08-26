@@ -73,15 +73,26 @@ const chat = async (req: Request, res: Response): Promise<void> => {
 
     const contents = [...formattedHistory, { role: 'user', parts: [{ text: message.trim() }] }];
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const generateConfig = {
       contents,
       config: {
         systemInstruction: SYSTEM_PROMPTS[userRole as TUserRole],
         temperature: 0.7,
         maxOutputTokens: 1024,
       },
-    });
+    };
+
+    let response;
+    try {
+      response = await ai.models.generateContent({ model: 'gemini-3.6-flash', ...generateConfig });
+    } catch (err: any) {
+      if (err?.status === 404 || err?.message?.includes('404')) {
+        console.warn('gemini-3.6-flash not found, falling back to gemini-1.5-flash');
+        response = await ai.models.generateContent({ model: 'gemini-1.5-flash', ...generateConfig });
+      } else {
+        throw err;
+      }
+    }
 
     res.status(200).json({
       success: true,
