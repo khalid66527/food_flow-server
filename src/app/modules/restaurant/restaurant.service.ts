@@ -298,6 +298,20 @@ const addFoodItem = async (foodData: Record<string, any>) => {
   }
   const status = isAvailable ? 'available' : 'unavailable';
 
+  const mainImage =
+    typeof foodData.image === 'string' && foodData.image.trim()
+      ? foodData.image.trim()
+      : Array.isArray(foodData.images) && foodData.images.length > 0
+      ? foodData.images[0]
+      : '';
+
+  const imagesList =
+    Array.isArray(foodData.images) && foodData.images.length > 0
+      ? foodData.images
+      : mainImage
+      ? [mainImage]
+      : [];
+
   const foodDoc = {
     restaurantId: String(foodData.restaurantId).trim(),
     name,
@@ -305,12 +319,20 @@ const addFoodItem = async (foodData: Record<string, any>) => {
     price,
     discountPrice: foodData.discountPrice ? Number(foodData.discountPrice) : undefined,
     category: (foodData.category || 'General').trim() || 'General',
-    image: typeof foodData.image === 'string' ? foodData.image.trim() : '',
+    image: mainImage,
+    images: imagesList,
     status,
     isAvailable,
     isVegetarian: foodData.isVegetarian ?? false,
     isSpicy: foodData.isSpicy ?? false,
     tags: Array.isArray(foodData.tags) ? foodData.tags : [],
+    ingredients: Array.isArray(foodData.ingredients) ? foodData.ingredients : [],
+    sizeOptions: Array.isArray(foodData.sizeOptions) ? foodData.sizeOptions : [],
+    extras: Array.isArray(foodData.extras) ? foodData.extras : [],
+    categoryDetails:
+      typeof foodData.categoryDetails === 'object' && foodData.categoryDetails !== null
+        ? foodData.categoryDetails
+        : {},
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
