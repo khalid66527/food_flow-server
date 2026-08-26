@@ -227,6 +227,138 @@ const getRestaurantMenu = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+/**
+ * Update Food Item
+ */
+const updateFoodItem = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const updated = await RestaurantService.updateFoodItem(foodId, req.body);
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Food item not found' });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Food item updated successfully',
+      data: updated,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error?.message || 'Failed to update food item',
+    });
+  }
+};
+
+/**
+ * Toggle Food Item Availability
+ */
+const toggleFoodAvailability = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const { isAvailable, status } = req.body;
+    const availableFlag = typeof isAvailable === 'boolean' ? isAvailable : status === 'available';
+
+    const updated = await RestaurantService.toggleFoodAvailability(foodId, availableFlag);
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Food item not found' });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: `Food item is now ${availableFlag ? 'Available' : 'Unavailable'}`,
+      data: updated,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error?.message || 'Failed to toggle food availability',
+    });
+  }
+};
+
+/**
+ * Delete Food Item
+ */
+const deleteFoodItem = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const deleted = await RestaurantService.deleteFoodItem(foodId);
+    if (!deleted) {
+      res.status(404).json({ success: false, message: 'Food item not found or already deleted' });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Food item deleted successfully',
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error?.message || 'Failed to delete food item',
+    });
+  }
+};
+
+/**
+ * Get Single Food Item Details by ID
+ */
+const getFoodItemDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const foodItem = await RestaurantService.getFoodItemById(foodId);
+    if (!foodItem) {
+      res.status(404).json({
+        success: false,
+        message: 'Food item not found',
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Food item details fetched successfully',
+      data: foodItem,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to fetch food details',
+      data: null,
+    });
+  }
+};
+
+/**
+ * Get Single Restaurant Details by ID or Slug
+ */
+const getSingleRestaurant = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const restaurant = await RestaurantService.getSingleRestaurant(id);
+    if (!restaurant) {
+      res.status(404).json({
+        success: false,
+        message: 'Restaurant not found',
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant fetched successfully',
+      data: restaurant,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to fetch restaurant',
+      data: null,
+    });
+  }
+};
+
 export const RestaurantController = {
   createRestaurant,
   getMyProfile,
@@ -235,4 +367,10 @@ export const RestaurantController = {
   getAllRestaurants,
   addFoodItem,
   getRestaurantMenu,
+  updateFoodItem,
+  toggleFoodAvailability,
+  deleteFoodItem,
+  getFoodItemDetails,
+  getSingleRestaurant,
 };
+

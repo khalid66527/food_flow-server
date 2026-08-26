@@ -298,6 +298,20 @@ const addFoodItem = async (foodData: Record<string, any>) => {
   }
   const status = isAvailable ? 'available' : 'unavailable';
 
+  const mainImage =
+    typeof foodData.image === 'string' && foodData.image.trim()
+      ? foodData.image.trim()
+      : Array.isArray(foodData.images) && foodData.images.length > 0
+      ? foodData.images[0]
+      : '';
+
+  const imagesList =
+    Array.isArray(foodData.images) && foodData.images.length > 0
+      ? foodData.images
+      : mainImage
+      ? [mainImage]
+      : [];
+
   const foodDoc = {
     restaurantId: String(foodData.restaurantId).trim(),
     name,
@@ -305,12 +319,20 @@ const addFoodItem = async (foodData: Record<string, any>) => {
     price,
     discountPrice: foodData.discountPrice ? Number(foodData.discountPrice) : undefined,
     category: (foodData.category || 'General').trim() || 'General',
-    image: typeof foodData.image === 'string' ? foodData.image.trim() : '',
+    image: mainImage,
+    images: imagesList,
     status,
     isAvailable,
     isVegetarian: foodData.isVegetarian ?? false,
     isSpicy: foodData.isSpicy ?? false,
     tags: Array.isArray(foodData.tags) ? foodData.tags : [],
+    ingredients: Array.isArray(foodData.ingredients) ? foodData.ingredients : [],
+    sizeOptions: Array.isArray(foodData.sizeOptions) ? foodData.sizeOptions : [],
+    extras: Array.isArray(foodData.extras) ? foodData.extras : [],
+    categoryDetails:
+      typeof foodData.categoryDetails === 'object' && foodData.categoryDetails !== null
+        ? foodData.categoryDetails
+        : {},
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -333,6 +355,149 @@ const getRestaurantMenu = async (restaurantId: string) => {
   return items;
 };
 
+/**
+ * Update Food Item
+ */
+const updateFoodItem = async (foodId: string, updateData: Record<string, any>) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+
+  const sanitizedUpdate: Record<string, any> = { ...updateData };
+  delete sanitizedUpdate._id;
+  delete sanitizedUpdate.id;
+
+  if (typeof sanitizedUpdate.price === 'string') {
+    sanitizedUpdate.price = Number(sanitizedUpdate.price);
+  }
+  if (sanitizedUpdate.discountPrice !== undefined && sanitizedUpdate.discountPrice !== '') {
+    sanitizedUpdate.discountPrice = Number(sanitizedUpdate.discountPrice);
+  } else if (sanitizedUpdate.discountPrice === '') {
+    sanitizedUpdate.discountPrice = null;
+  }
+
+  if (typeof sanitizedUpdate.isAvailable === 'boolean') {
+    sanitizedUpdate.status = sanitizedUpdate.isAvailable ? 'available' : 'unavailable';
+  } else if (typeof sanitizedUpdate.status === 'string') {
+    sanitizedUpdate.isAvailable = sanitizedUpdate.status.toLowerCase() === 'available';
+  }
+
+  if (Array.isArray(sanitizedUpdate.images) && sanitizedUpdate.images.length > 0) {
+    sanitizedUpdate.image = sanitizedUpdate.images[0];
+  }
+
+  sanitizedUpdate.updatedAt = new Date().toISOString();
+
+  const result = await foodCollection.findOneAndUpdate(
+    query,
+    { $set: sanitizedUpdate },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Toggle Food Item Availability
+ */
+const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const status = isAvailable ? 'available' : 'unavailable';
+
+  const result = await foodCollection.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        isAvailable,
+        status,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Delete Food Item
+ */
+const deleteFoodItem = async (foodId: string) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const result = await foodCollection.deleteOne(query);
+  return result.deletedCount > 0;
+};
+
+/**
+ * Get Single Food Item Details by ID (with Restaurant Details Populated)
+ */
+const getFoodItemById = async (foodId: string) => {
+  if (!foodId) return null;
+
+  const query = ObjectId.isValid(foodId)
+    ? { $or: [{ _id: new ObjectId(foodId) }, { _id: foodId }] }
+    : { _id: foodId };
+
+  const foodDoc = await foodCollection.findOne(query);
+  if (!foodDoc) return null;
+
+  let restaurantDoc = null;
+  if (foodDoc.restaurantId) {
+    const restQuery = ObjectId.isValid(foodDoc.restaurantId)
+      ? {
+          $or: [
+            { _id: new ObjectId(foodDoc.restaurantId) },
+            { _id: String(foodDoc.restaurantId) },
+            { id: String(foodDoc.restaurantId) },
+          ],
+        }
+      : {
+          $or: [
+            { _id: String(foodDoc.restaurantId) },
+            { id: String(foodDoc.restaurantId) },
+          ],
+        };
+    restaurantDoc = await restaurantCollection.findOne(restQuery);
+  }
+
+  return {
+    ...foodDoc,
+    restaurant: restaurantDoc || null,
+  };
+};
+
+/**
+ * Get Single Restaurant Details by ID or Slug (with Menu)
+ */
+const getSingleRestaurant = async (idOrSlug: string) => {
+  if (!idOrSlug) return null;
+
+  const query = ObjectId.isValid(idOrSlug)
+    ? {
+        $or: [
+          { _id: new ObjectId(idOrSlug) },
+          { _id: idOrSlug },
+          { slug: idOrSlug },
+        ],
+      }
+    : { $or: [{ _id: idOrSlug }, { slug: idOrSlug }] };
+
+  const restaurantDoc = await restaurantCollection.findOne(query);
+  if (!restaurantDoc) return null;
+
+  const restId = String(restaurantDoc._id || restaurantDoc.id || idOrSlug);
+  const menuItems = await getRestaurantMenu(restId);
+
+  return {
+    ...restaurantDoc,
+    menu: menuItems,
+  };
+};
+
 export const RestaurantService = {
   createOrUpdateRestaurant,
   getMyRestaurantProfile,
@@ -341,4 +506,10 @@ export const RestaurantService = {
   getAllRestaurants,
   addFoodItem,
   getRestaurantMenu,
+  updateFoodItem,
+  toggleFoodAvailability,
+  deleteFoodItem,
+  getFoodItemById,
+  getSingleRestaurant,
 };
+
