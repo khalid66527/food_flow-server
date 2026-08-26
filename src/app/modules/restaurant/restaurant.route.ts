@@ -23,7 +23,10 @@ router.get('/my-profile', RestaurantController.getMyProfile);
 router.patch('/my-profile', RestaurantController.updateMyProfile);
 router.patch('/toggle-status', RestaurantController.toggleStatus);
 
-// 4. Public Restaurant Discovery & Explore Routes (/api/restaurants)
+// 4. Create / Onboard Restaurant directly on (/api/restaurants)
+router.post('/', RestaurantController.createRestaurant);
+
+// 5. Public Restaurant Discovery & Explore Routes (/api/restaurants)
 router.use('/', ExploreRestaurantRoutes);
 
 export const RestaurantRoutes = router;
