@@ -355,6 +355,83 @@ const getRestaurantMenu = async (restaurantId: string) => {
   return items;
 };
 
+/**
+ * Update Food Item
+ */
+const updateFoodItem = async (foodId: string, updateData: Record<string, any>) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+
+  const sanitizedUpdate: Record<string, any> = { ...updateData };
+  delete sanitizedUpdate._id;
+  delete sanitizedUpdate.id;
+
+  if (typeof sanitizedUpdate.price === 'string') {
+    sanitizedUpdate.price = Number(sanitizedUpdate.price);
+  }
+  if (sanitizedUpdate.discountPrice !== undefined && sanitizedUpdate.discountPrice !== '') {
+    sanitizedUpdate.discountPrice = Number(sanitizedUpdate.discountPrice);
+  } else if (sanitizedUpdate.discountPrice === '') {
+    sanitizedUpdate.discountPrice = null;
+  }
+
+  if (typeof sanitizedUpdate.isAvailable === 'boolean') {
+    sanitizedUpdate.status = sanitizedUpdate.isAvailable ? 'available' : 'unavailable';
+  } else if (typeof sanitizedUpdate.status === 'string') {
+    sanitizedUpdate.isAvailable = sanitizedUpdate.status.toLowerCase() === 'available';
+  }
+
+  if (Array.isArray(sanitizedUpdate.images) && sanitizedUpdate.images.length > 0) {
+    sanitizedUpdate.image = sanitizedUpdate.images[0];
+  }
+
+  sanitizedUpdate.updatedAt = new Date().toISOString();
+
+  const result = await foodCollection.findOneAndUpdate(
+    query,
+    { $set: sanitizedUpdate },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Toggle Food Item Availability
+ */
+const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const status = isAvailable ? 'available' : 'unavailable';
+
+  const result = await foodCollection.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        isAvailable,
+        status,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Delete Food Item
+ */
+const deleteFoodItem = async (foodId: string) => {
+  if (!foodId) throw new Error("Food ID is required");
+
+  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const result = await foodCollection.deleteOne(query);
+  return result.deletedCount > 0;
+};
+
 export const RestaurantService = {
   createOrUpdateRestaurant,
   getMyRestaurantProfile,
@@ -363,4 +440,8 @@ export const RestaurantService = {
   getAllRestaurants,
   addFoodItem,
   getRestaurantMenu,
+  updateFoodItem,
+  toggleFoodAvailability,
+  deleteFoodItem,
 };
+
