@@ -361,7 +361,7 @@ const getRestaurantMenu = async (restaurantId: string) => {
 const updateFoodItem = async (foodId: string, updateData: Record<string, any>) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
 
   const sanitizedUpdate: Record<string, any> = { ...updateData };
   delete sanitizedUpdate._id;
@@ -403,7 +403,7 @@ const updateFoodItem = async (foodId: string, updateData: Record<string, any>) =
 const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
   const status = isAvailable ? 'available' : 'unavailable';
 
   const result = await foodCollection.findOneAndUpdate(
@@ -427,7 +427,7 @@ const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
 const deleteFoodItem = async (foodId: string) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
   const result = await foodCollection.deleteOne(query);
   return result.deletedCount > 0;
 };
@@ -438,7 +438,7 @@ const deleteFoodItem = async (foodId: string) => {
 const getFoodItemById = async (foodId: string) => {
   if (!foodId) return null;
 
-  const query = ObjectId.isValid(foodId)
+  const query: any = ObjectId.isValid(foodId)
     ? { $or: [{ _id: new ObjectId(foodId) }, { _id: foodId }] }
     : { _id: foodId };
 
@@ -447,7 +447,7 @@ const getFoodItemById = async (foodId: string) => {
 
   let restaurantDoc = null;
   if (foodDoc.restaurantId) {
-    const restQuery = ObjectId.isValid(foodDoc.restaurantId)
+    const restQuery: any = ObjectId.isValid(foodDoc.restaurantId)
       ? {
           $or: [
             { _id: new ObjectId(foodDoc.restaurantId) },
@@ -476,7 +476,7 @@ const getFoodItemById = async (foodId: string) => {
 const getSingleRestaurant = async (idOrSlug: string) => {
   if (!idOrSlug) return null;
 
-  const query = ObjectId.isValid(idOrSlug)
+  const query: any = ObjectId.isValid(idOrSlug)
     ? {
         $or: [
           { _id: new ObjectId(idOrSlug) },
