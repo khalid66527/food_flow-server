@@ -17,6 +17,8 @@ export const client = new MongoClient(config.mongodb_uri, {
 export const db: Db = client.db(config.db_name);
 
 // Database Collections
+// Better Auth typically uses 'user' (singular), we also support collection fallback
+export const usersCollection: Collection = db.collection('user');
 export const restaurantCollection: Collection = db.collection('restaurant');
 export const foodCollection: Collection = db.collection('food');
 
