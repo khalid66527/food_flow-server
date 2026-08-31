@@ -1,2 +1,2 @@
-export * from './profile/rider.profile.controller';
-export { RiderProfileController as RiderController } from './profile/rider.profile.controller';
+// Re-export from profile module for backward compatibility
+export { RiderProfileController } from './profile/rider.profile.controller';
