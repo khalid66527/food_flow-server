@@ -113,7 +113,7 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
     minOrderAmount: Number(payload.minOrderAmount) || 0,
     priceRange: payload.priceRange || '$$',
     isOpen: payload.isOpen ?? true,
-    status: payload.status || 'active',
+    status: payload.status || 'pending',
     isFeatured: payload.isFeatured ?? false,
     discountOffer: payload.discountOffer || '',
     createdAt: new Date().toISOString(),
@@ -180,7 +180,7 @@ const updateMyRestaurantProfile = async (
     return null;
   }
 
-  const { _id, ...restPayload } = payload;
+  const { _id, status, ...restPayload } = payload;
   const updateData = { ...restPayload, updatedAt: new Date().toISOString() };
 
   const result = await restaurantCollection.findOneAndUpdate(
@@ -285,6 +285,29 @@ const addFoodItem = async (foodData: Record<string, any>) => {
   }
   if (!foodData.restaurantId || !String(foodData.restaurantId).trim()) {
     throw new Error('Restaurant ID is required.');
+  }
+
+  const rawRestId = String(foodData.restaurantId).trim();
+  const restQueries: Record<string, any>[] = [
+    { slug: rawRestId },
+    { ownerEmail: rawRestId },
+    { ownerId: rawRestId },
+    { contactEmail: rawRestId },
+  ];
+
+  if (ObjectId.isValid(rawRestId)) {
+    try {
+      restQueries.push({ _id: new ObjectId(rawRestId) });
+    } catch (e) {}
+  }
+
+  const restaurant = await restaurantCollection.findOne({ $or: restQueries });
+  if (!restaurant) {
+    throw new Error('Restaurant profile not found. You must create and complete your restaurant profile first.');
+  }
+
+  if ((restaurant.status || '').toLowerCase() !== 'active') {
+    throw new Error('Your restaurant is pending approval by admin. You cannot add food items until your restaurant is approved.');
   }
 
   // Status ("available" | "unavailable") maps to the isAvailable flag
