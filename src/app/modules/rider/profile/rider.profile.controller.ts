@@ -52,7 +52,11 @@ const getMyProfile = async (req: Request, res: Response): Promise<void> => {
  */
 const createProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const payload = req.body;
+    const payload = {
+      ...req.body,
+      userId: req.user?.userId || req.user?.email || req.body.userId || '',
+      email: req.user?.email || req.body.email || '',
+    };
 
     if (!payload.email || !payload.name) {
       res.status(400).json({
