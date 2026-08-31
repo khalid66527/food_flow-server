@@ -14,4 +14,15 @@ router.delete('/users/:id', AdminController.deleteUser);
 // Restaurant details for modal view
 router.get('/restaurant-details/:identifier', AdminController.getRestaurantDetails);
 
+// Restaurant & Rider Approval & Management routes under /api/admin
+router.get('/restaurants', AdminController.getAllRestaurants);
+router.patch('/restaurants/:id/status', AdminController.updateRestaurantStatus);
+router.delete('/restaurants/:id', AdminController.deleteRestaurant);
+
+router.get('/riders', AdminController.getAllRiders);
+router.patch('/riders/:id/status', AdminController.updateRiderStatus);
+router.delete('/riders/:id', AdminController.deleteRider);
+
+router.get('/restaurant-rider-stats', AdminController.getRestaurantAndRiderStats);
+
 export const AdminRoutes = router;

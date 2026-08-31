@@ -71,8 +71,8 @@ const createRiderProfile = async (payload: Partial<TRiderProfile>) => {
       relation: '',
       phone: '',
     },
-    isAvailable: payload.isAvailable !== undefined ? payload.isAvailable : true,
-    status: payload.status || 'active',
+    isAvailable: payload.isAvailable !== undefined ? payload.isAvailable : false,
+    status: payload.status || 'pending',
     totalDeliveries: payload.totalDeliveries || 0,
     rating: payload.rating || 5.0,
     totalEarnings: payload.totalEarnings || 0,
@@ -124,6 +124,7 @@ const updateRiderProfile = async (identifier: string, payload: Partial<TRiderPro
 
   delete updateData._id;
   delete updateData.createdAt;
+  delete updateData.status; // status is only modified by admin
 
   await riderCollection.updateOne({ _id: existingRider._id }, { $set: updateData });
 
@@ -146,8 +147,17 @@ const toggleAvailability = async (identifier: string, isAvailable: boolean) => {
     } catch (e) {}
   }
 
+  const existing = await riderCollection.findOne({ $or: query });
+  if (!existing) {
+    throw new Error('Rider profile not found.');
+  }
+
+  if (isAvailable && (existing.status || '').toLowerCase() !== 'active') {
+    throw new Error('Your rider profile is pending approval by Admin. You cannot go online until approved.');
+  }
+
   const result = await riderCollection.findOneAndUpdate(
-    { $or: query },
+    { _id: existing._id },
     {
       $set: {
         isAvailable,
