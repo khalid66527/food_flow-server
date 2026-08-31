@@ -22,6 +22,10 @@ export const usersCollection: Collection = db.collection('user');
 export const restaurantCollection: Collection = db.collection('restaurant');
 export const riderCollection: Collection = db.collection('rider');
 export const foodCollection: Collection = db.collection('food');
+export const orderCollection: Collection = db.collection('orders');
+export const deliveryCollection: Collection = db.collection('deliveries');
+export const notificationCollection: Collection = db.collection('notifications');
+export const reviewCollection: Collection = db.collection('reviews');
 
 export async function connectDB() {
   try {

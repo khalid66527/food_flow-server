@@ -2,13 +2,17 @@ import { Request, Response } from 'express';
 import { RiderProfileService } from './rider.profile.service';
 
 /**
- * Get My Rider Profile
+ * Get My Rider Profile — prefers auth token over query/headers
  */
 const getMyProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const email = (req.query.email as string) || (req.headers['x-user-email'] as string);
-    const userId = (req.query.userId as string) || (req.headers['x-user-id'] as string);
-    const identifier = email || userId;
+    const identifier =
+      req.user?.email ||
+      req.user?.userId ||
+      (req.query.email as string) ||
+      (req.query.userId as string) ||
+      (req.headers['x-user-email'] as string) ||
+      (req.headers['x-user-id'] as string);
 
     if (!identifier) {
       res.status(400).json({
@@ -75,13 +79,16 @@ const createProfile = async (req: Request, res: Response): Promise<void> => {
 };
 
 /**
- * Update existing Rider Profile
+ * Update existing Rider Profile — prefers auth token
  */
 const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const email = (req.query.email as string) || req.body.email;
-    const userId = (req.query.userId as string) || req.body.userId;
-    const identifier = email || userId;
+    const identifier =
+      req.user?.email ||
+      req.user?.userId ||
+      (req.query.email as string) ||
+      req.body.email ||
+      req.body.userId;
 
     if (!identifier) {
       res.status(400).json({
@@ -108,12 +115,16 @@ const updateProfile = async (req: Request, res: Response): Promise<void> => {
 };
 
 /**
- * Toggle Rider Online Availability
+ * Toggle Rider Online/Offline Availability — prefers auth token
  */
 const toggleAvailability = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, userId, isAvailable } = req.body;
-    const identifier = email || userId;
+    const { isAvailable } = req.body;
+    const identifier =
+      req.user?.email ||
+      req.user?.userId ||
+      req.body.email ||
+      req.body.userId;
 
     if (!identifier || typeof isAvailable !== 'boolean') {
       res.status(400).json({
@@ -140,12 +151,16 @@ const toggleAvailability = async (req: Request, res: Response): Promise<void> =>
 };
 
 /**
- * Delete Rider Profile
+ * Delete Rider Profile — prefers auth token
  */
 const deleteProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, userId } = req.body;
-    const identifier = email || userId || (req.query.email as string);
+    const identifier =
+      req.user?.email ||
+      req.user?.userId ||
+      req.body.email ||
+      req.body.userId ||
+      (req.query.email as string);
 
     if (!identifier) {
       res.status(400).json({

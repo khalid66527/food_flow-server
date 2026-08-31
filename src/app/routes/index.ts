@@ -5,10 +5,21 @@ import { AdminRoutes } from '../modules/admin/admin.route';
 import { RiderRoutes } from '../modules/rider/rider.route';
 import { CustomerRoutes } from '../modules/customer/customer.route';
 import { AiRoutes } from '../modules/ai/ai.route';
+import { AuthRoutes } from '../modules/auth/auth.route';
+import { OrderRoutes } from '../modules/order/order.route';
+import { NotificationRoutes } from '../modules/notification/notification.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/auth',
+    route: AuthRoutes,
+  },
+  {
+    path: '/orders',
+    route: OrderRoutes,
+  },
   {
     path: '/restaurants',
     route: RestaurantRoutes,
@@ -32,6 +43,10 @@ const moduleRoutes = [
   {
     path: '/ai',
     route: AiRoutes,
+  },
+  {
+    path: '/notifications',
+    route: NotificationRoutes,
   },
 ];
 
