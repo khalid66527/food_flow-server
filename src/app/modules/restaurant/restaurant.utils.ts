@@ -136,9 +136,17 @@ export const buildRestaurantMongoQuery = (
     queryFilters.push({ isFeatured: true });
   }
 
-  // Status active filter (defaults to active unless specified)
+  // Status active filter - only show approved active restaurants to public customers
   queryFilters.push({
-    status: { $ne: 'inactive' },
+    $and: [
+      { status: { $nin: ['pending', 'suspended', 'rejected', 'inactive'] } },
+      {
+        $or: [
+          { status: { $regex: /^(active|approved)$/i } },
+          { status: { $exists: false } },
+        ],
+      },
+    ],
   });
 
   if (queryFilters.length === 0) {

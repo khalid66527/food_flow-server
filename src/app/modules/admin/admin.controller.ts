@@ -243,6 +243,211 @@ const getRestaurantDetails = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+/**
+ * Get all restaurants for Admin
+ */
+const getAllRestaurants = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = {
+      status: req.query.status as string,
+      search: req.query.search as string,
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    };
+
+    const result = await AdminService.getAllRestaurantsAdmin(query);
+
+    res.status(200).json({
+      success: true,
+      message: 'Restaurants retrieved successfully!',
+      meta: result.meta,
+      data: result.data,
+    });
+  } catch (error: any) {
+    console.error('Error fetching restaurants in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to retrieve restaurants',
+    });
+  }
+};
+
+/**
+ * Update restaurant status (approve to active, suspend, reject, pending)
+ */
+const updateRestaurantStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!id || !status) {
+      res.status(400).json({ success: false, message: 'Restaurant ID and status are required.' });
+      return;
+    }
+
+    const updated = await AdminService.updateRestaurantStatusAdmin(id, status);
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Restaurant not found to update status.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Restaurant status updated to "${status}" successfully!`,
+      data: updated,
+    });
+  } catch (error: any) {
+    console.error('Error updating restaurant status in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update restaurant status',
+    });
+  }
+};
+
+/**
+ * Delete a restaurant
+ */
+const deleteRestaurant = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Restaurant ID is required.' });
+      return;
+    }
+
+    const result = await AdminService.deleteRestaurantAdmin(id);
+    if (result.deletedCount === 0) {
+      res.status(404).json({ success: false, message: 'Restaurant not found to delete.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant deleted successfully!',
+      data: { id },
+    });
+  } catch (error: any) {
+    console.error('Error deleting restaurant in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete restaurant',
+    });
+  }
+};
+
+/**
+ * Get all riders for Admin
+ */
+const getAllRiders = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = {
+      status: req.query.status as string,
+      search: req.query.search as string,
+      page: req.query.page as string,
+      limit: req.query.limit as string,
+    };
+
+    const result = await AdminService.getAllRidersAdmin(query);
+
+    res.status(200).json({
+      success: true,
+      message: 'Riders retrieved successfully!',
+      meta: result.meta,
+      data: result.data,
+    });
+  } catch (error: any) {
+    console.error('Error fetching riders in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to retrieve riders',
+    });
+  }
+};
+
+/**
+ * Update rider status (approve to active, suspend, reject, pending)
+ */
+const updateRiderStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!id || !status) {
+      res.status(400).json({ success: false, message: 'Rider ID and status are required.' });
+      return;
+    }
+
+    const updated = await AdminService.updateRiderStatusAdmin(id, status);
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Rider not found to update status.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Rider status updated to "${status}" successfully!`,
+      data: updated,
+    });
+  } catch (error: any) {
+    console.error('Error updating rider status in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update rider status',
+    });
+  }
+};
+
+/**
+ * Delete a rider
+ */
+const deleteRider = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Rider ID is required.' });
+      return;
+    }
+
+    const result = await AdminService.deleteRiderAdmin(id);
+    if (result.deletedCount === 0) {
+      res.status(404).json({ success: false, message: 'Rider not found to delete.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Rider deleted successfully!',
+      data: { id },
+    });
+  } catch (error: any) {
+    console.error('Error deleting rider in AdminController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete rider',
+    });
+  }
+};
+
+/**
+ * Get Restaurant & Rider combined stats
+ */
+const getRestaurantAndRiderStats = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const stats = await AdminService.getRestaurantAndRiderStats();
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    console.error('Error fetching restaurant & rider stats:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to retrieve stats',
+    });
+  }
+};
+
 export const AdminController = {
   getAllUsers,
   getUserById,
@@ -251,4 +456,12 @@ export const AdminController = {
   updateUser,
   deleteUser,
   getRestaurantDetails,
+  getAllRestaurants,
+  updateRestaurantStatus,
+  deleteRestaurant,
+  getAllRiders,
+  updateRiderStatus,
+  deleteRider,
+  getRestaurantAndRiderStats,
 };
+

@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { usersCollection, restaurantCollection, db } from '../../config/db';
+import { usersCollection, restaurantCollection, riderCollection, db } from '../../config/db';
 import { TUser, TUserQueryParams, IUserStats } from './admin.interface';
 
 /**
@@ -407,6 +407,256 @@ const deleteUser = async (userId: string) => {
 };
 
 /**
+ * Get all restaurants for Admin management with filters & stats
+ */
+const getAllRestaurantsAdmin = async (queryParams: {
+  status?: string;
+  search?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const { status = 'all', search = '', page = 1, limit = 10 } = queryParams;
+  const filter: Record<string, any> = {};
+
+  if (status && status !== 'all') {
+    filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
+  }
+
+  if (search && search.trim() !== '') {
+    const sRegex = { $regex: search.trim(), $options: 'i' };
+    filter.$or = [
+      { restaurantName: sRegex },
+      { name: sRegex },
+      { ownerEmail: sRegex },
+      { contactEmail: sRegex },
+      { contactNumber: sRegex },
+      { 'address.city': sRegex },
+      { 'address.area': sRegex },
+      { slug: sRegex },
+    ];
+  }
+
+  const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+  const limitNum = Math.max(1, parseInt(String(limit), 10) || 10);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [restaurants, total, totalAll, pending, active, suspended] = await Promise.all([
+    restaurantCollection.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).toArray(),
+    restaurantCollection.countDocuments(filter),
+    restaurantCollection.countDocuments({}),
+    restaurantCollection.countDocuments({ status: { $regex: /^pending$/i } }),
+    restaurantCollection.countDocuments({ status: { $regex: /^active$/i } }),
+    restaurantCollection.countDocuments({ status: { $regex: /^(suspended|rejected|inactive)$/i } }),
+  ]);
+
+  return {
+    meta: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum) || 1,
+      stats: {
+        total: totalAll,
+        pending,
+        active,
+        suspended,
+      },
+    },
+    data: restaurants,
+  };
+};
+
+/**
+ * Update Restaurant Status (e.g. approve to 'active', 'suspended', 'pending', 'rejected')
+ */
+const updateRestaurantStatusAdmin = async (identifier: string, newStatus: string) => {
+  const query: Record<string, any>[] = [
+    { ownerEmail: identifier },
+    { slug: identifier },
+  ];
+
+  if (ObjectId.isValid(identifier)) {
+    try {
+      query.push({ _id: new ObjectId(identifier) });
+    } catch (e) {}
+  }
+
+  const result = await restaurantCollection.findOneAndUpdate(
+    { $or: query },
+    {
+      $set: {
+        status: newStatus.toLowerCase(),
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Delete Restaurant
+ */
+const deleteRestaurantAdmin = async (identifier: string) => {
+  const query: Record<string, any>[] = [
+    { ownerEmail: identifier },
+    { slug: identifier },
+  ];
+
+  if (ObjectId.isValid(identifier)) {
+    try {
+      query.push({ _id: new ObjectId(identifier) });
+    } catch (e) {}
+  }
+
+  const result = await restaurantCollection.deleteOne({ $or: query });
+  return result;
+};
+
+/**
+ * Get all riders for Admin management with filters & stats
+ */
+const getAllRidersAdmin = async (queryParams: {
+  status?: string;
+  search?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const { status = 'all', search = '', page = 1, limit = 10 } = queryParams;
+  const filter: Record<string, any> = {};
+
+  if (status && status !== 'all') {
+    filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
+  }
+
+  if (search && search.trim() !== '') {
+    const sRegex = { $regex: search.trim(), $options: 'i' };
+    filter.$or = [
+      { name: sRegex },
+      { email: sRegex },
+      { phone: sRegex },
+      { city: sRegex },
+      { deliveryZone: sRegex },
+      { vehicleNumber: sRegex },
+      { drivingLicenseNumber: sRegex },
+      { nidNumber: sRegex },
+    ];
+  }
+
+  const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+  const limitNum = Math.max(1, parseInt(String(limit), 10) || 10);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [riders, total, totalAll, pending, active, suspended] = await Promise.all([
+    riderCollection.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).toArray(),
+    riderCollection.countDocuments(filter),
+    riderCollection.countDocuments({}),
+    riderCollection.countDocuments({ status: { $regex: /^pending$/i } }),
+    riderCollection.countDocuments({ status: { $regex: /^active$/i } }),
+    riderCollection.countDocuments({ status: { $regex: /^(suspended|rejected|inactive)$/i } }),
+  ]);
+
+  return {
+    meta: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum) || 1,
+      stats: {
+        total: totalAll,
+        pending,
+        active,
+        suspended,
+      },
+    },
+    data: riders,
+  };
+};
+
+/**
+ * Update Rider Status (e.g. approve to 'active', 'suspended', 'pending', 'rejected')
+ */
+const updateRiderStatusAdmin = async (identifier: string, newStatus: string) => {
+  const query: Record<string, any>[] = [
+    { email: identifier },
+    { userId: identifier },
+  ];
+
+  if (ObjectId.isValid(identifier)) {
+    try {
+      query.push({ _id: new ObjectId(identifier) });
+    } catch (e) {}
+  }
+
+  const result = await riderCollection.findOneAndUpdate(
+    { $or: query },
+    {
+      $set: {
+        status: newStatus.toLowerCase(),
+        updatedAt: new Date(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
+/**
+ * Delete Rider Profile
+ */
+const deleteRiderAdmin = async (identifier: string) => {
+  const query: Record<string, any>[] = [
+    { email: identifier },
+    { userId: identifier },
+  ];
+
+  if (ObjectId.isValid(identifier)) {
+    try {
+      query.push({ _id: new ObjectId(identifier) });
+    } catch (e) {}
+  }
+
+  const result = await riderCollection.deleteOne({ $or: query });
+  return result;
+};
+
+/**
+ * Aggregated stats for Restaurant & Rider approval management
+ */
+const getRestaurantAndRiderStats = async () => {
+  const [
+    totalRestaurants,
+    pendingRestaurants,
+    activeRestaurants,
+    totalRiders,
+    pendingRiders,
+    activeRiders,
+  ] = await Promise.all([
+    restaurantCollection.countDocuments({}),
+    restaurantCollection.countDocuments({ status: { $regex: /^pending$/i } }),
+    restaurantCollection.countDocuments({ status: { $regex: /^active$/i } }),
+    riderCollection.countDocuments({}),
+    riderCollection.countDocuments({ status: { $regex: /^pending$/i } }),
+    riderCollection.countDocuments({ status: { $regex: /^active$/i } }),
+  ]);
+
+  return {
+    restaurants: {
+      total: totalRestaurants,
+      pending: pendingRestaurants,
+      active: activeRestaurants,
+    },
+    riders: {
+      total: totalRiders,
+      pending: pendingRiders,
+      active: activeRiders,
+    },
+    totalPendingApprovals: pendingRestaurants + pendingRiders,
+  };
+};
+/**
  * Get Restaurant details by owner email or owner ID
  */
 const getRestaurantDetails = async (identifier: string) => {
@@ -434,4 +684,12 @@ export const AdminService = {
   updateUser,
   deleteUser,
   getRestaurantDetails,
+  getAllRestaurantsAdmin,
+  updateRestaurantStatusAdmin,
+  deleteRestaurantAdmin,
+  getAllRidersAdmin,
+  updateRiderStatusAdmin,
+  deleteRiderAdmin,
+  getRestaurantAndRiderStats,
 };
+
