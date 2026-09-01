@@ -25,6 +25,7 @@ export const foodCollection: Collection = db.collection('food');
 export const cartCollection: Collection = db.collection('cart');
 export const contactCollection: Collection = db.collection('contacts');
 export const addressCollection: Collection = db.collection('address');
+export const ordersCollection: Collection = db.collection('orders');
 export async function connectDB() {
   try {
     await client.connect();
