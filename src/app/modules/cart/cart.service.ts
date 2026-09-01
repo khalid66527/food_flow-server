@@ -84,29 +84,46 @@ const addToCart = async (userId: string, payload: Partial<TCartItem>) => {
 };
 
 /**
- * Update the quantity of a specific food item in the user's cart.
- * If quantity drops to or below zero, the item is removed from the cart.
+ * Build a query that matches a cart line by either the real food id or the
+ * cart line-item `_id`, so interactive update/remove work regardless of which
+ * id the client sends.
  */
-const updateCartItem = async (userId: string, foodId: string, quantity: number) => {
+const cartLineQuery = (userId: string, foodId: string): any => {
+  const foodIdTrim = String(foodId).trim();
+  return {
+    userId,
+    $or: [{ foodId: foodIdTrim }, { _id: foodIdTrim }],
+  };
+};
+
+/**
+ * Update the quantity of a specific food item in the user's cart using an
+ * atomic delta increment so concurrent/rapid requests compose correctly.
+ * If the resulting quantity drops to or below zero, the item is removed.
+ */
+const updateCartItem = async (userId: string, foodId: string, delta: number) => {
   if (!userId) throw new Error('User ID is required.');
   if (!foodId) throw new Error('Food ID is required.');
 
-  const targetQuantity = Number(quantity);
-  if (Number.isNaN(targetQuantity)) throw new Error('Quantity must be a valid number.');
+  const change = Number(delta);
+  if (Number.isNaN(change)) throw new Error('A numeric delta is required.');
 
-  if (targetQuantity <= 0) {
-    await cartCollection.deleteOne({ userId, foodId });
+  const query = cartLineQuery(userId, foodId);
+
+  const now = new Date().toISOString();
+  const updated = (await cartCollection.findOneAndUpdate(
+    query,
+    { $inc: { quantity: change }, $set: { updatedAt: now } },
+    { returnDocument: 'after' }
+  )) as TCartItem | null;
+
+  if (!updated) throw new Error('Cart item not found.');
+
+  if (Number(updated.quantity) <= 0) {
+    await cartCollection.deleteOne(query);
     return { removed: true, quantity: 0 };
   }
 
-  const now = new Date().toISOString();
-  await cartCollection.updateOne(
-    { userId, foodId },
-    { $set: { quantity: targetQuantity, updatedAt: now } }
-  );
-
-  const updated = (await cartCollection.findOne({ userId, foodId })) as TCartItem | null;
-  if (!updated) throw new Error('Cart item not found.');
   return normalizeCartDoc(updated);
 };
 
@@ -117,7 +134,7 @@ const removeCartItem = async (userId: string, foodId: string) => {
   if (!userId) throw new Error('User ID is required.');
   if (!foodId) throw new Error('Food ID is required.');
 
-  const result = await cartCollection.deleteOne({ userId, foodId });
+  const result = await cartCollection.deleteOne(cartLineQuery(userId, foodId));
   if (result.deletedCount === 0) throw new Error('Cart item not found.');
   return { removed: true };
 };
