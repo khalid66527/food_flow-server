@@ -6,6 +6,7 @@ import { RiderRoutes } from '../modules/rider/rider.route';
 import { CustomerRoutes } from '../modules/customer/customer.route';
 import { AiRoutes } from '../modules/ai/ai.route';
 import { CartRoutes } from '../modules/cart/cart.route';
+import { AddressRoutes } from '../modules/address/address.route';
 
 const router: Router = express.Router();
 
@@ -37,6 +38,10 @@ const moduleRoutes = [
   {
     path: '/cart',
     route: CartRoutes,
+  },
+  {
+    path: '/addresses',
+    route: AddressRoutes,
   },
 ];
 

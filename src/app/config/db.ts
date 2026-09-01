@@ -23,6 +23,7 @@ export const restaurantCollection: Collection = db.collection('restaurant');
 export const riderCollection: Collection = db.collection('rider');
 export const foodCollection: Collection = db.collection('food');
 export const cartCollection: Collection = db.collection('cart');
+export const addressCollection: Collection = db.collection('address');
 
 export async function connectDB() {
   try {
