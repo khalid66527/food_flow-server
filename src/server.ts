@@ -1,6 +1,8 @@
+import http from 'http';
 import app from './app';
 import config from './app/config';
 import { connectDB, client, db, restaurantCollection } from './app/config/db';
+import { initSocketServer, testSocketStartup } from './app/sockets/socket';
 
 // Re-exporting for backward compatibility if needed
 export { client, db, restaurantCollection };
@@ -12,8 +14,17 @@ async function bootstrap() {
 
     // Start Server (avoid double listening in Vercel serverless environment)
     if (!config.is_vercel) {
-      app.listen(config.port, () => {
+      // Create the HTTP server explicitly so Socket.io can attach to it
+      const httpServer = http.createServer(app);
+
+      // Initialize Socket.io (CORS enabled for the client origin)
+      initSocketServer(httpServer);
+
+      httpServer.listen(config.port, async () => {
         console.log(`🚀 Food Flow Server is running on http://localhost:${config.port}`);
+
+        // Test socket startup during server initialization
+        await testSocketStartup(`http://localhost:${config.port}`);
       });
     }
   } catch (error) {

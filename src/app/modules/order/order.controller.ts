@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { OrderService } from './order.service';
+import { getIO } from '../../sockets/socket';
+import { emitOrderStatusUpdated, emitLocationUpdated } from '../../sockets/orderTracking.socket';
 
 export class OrderController {
   static async createOrder(req: Request, res: Response) {
@@ -112,6 +114,9 @@ export class OrderController {
 
       const updatedOrder = await OrderService.advanceOrderStatus(id, status, actorRole || '');
 
+      // Broadcast real-time status update to order tracking room
+      emitOrderStatusUpdated(getIO(), id, status);
+
       return res.status(200).json({
         success: true,
         message: 'Order status updated successfully.',
@@ -134,6 +139,15 @@ export class OrderController {
       const { lat, lng } = req.body;
 
       const updatedOrder = await OrderService.updateRiderLocation(id, lat, lng);
+
+      // Broadcast real-time location update to order tracking room
+      emitLocationUpdated(
+        getIO(),
+        id,
+        lat,
+        lng,
+        updatedOrder?.riderLocation?.updatedAt || null
+      );
 
       return res.status(200).json({
         success: true,
