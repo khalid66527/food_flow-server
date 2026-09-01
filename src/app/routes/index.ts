@@ -5,6 +5,7 @@ import { AdminRoutes } from '../modules/admin/admin.route';
 import { RiderRoutes } from '../modules/rider/rider.route';
 import { CustomerRoutes } from '../modules/customer/customer.route';
 import { AiRoutes } from '../modules/ai/ai.route';
+import { ContactRoutes } from '../modules/contact/contact.route';
 
 const router: Router = express.Router();
 
@@ -25,16 +26,22 @@ const moduleRoutes = [
     path: '/rider',
     route: RiderRoutes,
   },
-  {
-    path: '/customer',
-    route: CustomerRoutes,
-  },
+  
   {
     path: '/ai',
     route: AiRoutes,
+  },
+  {
+    path: '/contacts',
+    route: ContactRoutes,
+  },
+  {
+    path: '/contact',
+    route: ContactRoutes,
   },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
 
 export default router;
+

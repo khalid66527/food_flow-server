@@ -22,6 +22,10 @@ export const usersCollection: Collection = db.collection('user');
 export const restaurantCollection: Collection = db.collection('restaurant');
 export const riderCollection: Collection = db.collection('rider');
 export const foodCollection: Collection = db.collection('food');
+export const cartCollection: Collection = db.collection('cart');
+export const contactCollection: Collection = db.collection('contacts');
+
+
 
 export async function connectDB() {
   try {
