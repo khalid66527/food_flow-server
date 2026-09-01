@@ -1,5 +1,18 @@
+import { ObjectId } from 'mongodb';
 import { addressCollection } from '../../config/db';
 import { TAddress } from './address.interface';
+
+/**
+ * Safely convert a string id to an ObjectId. Falls back to the raw string
+ * if the value is not a valid ObjectId hex string (defensive).
+ */
+const toObjectId = (id: string): ObjectId | string => {
+  try {
+    return new ObjectId(id);
+  } catch {
+    return id;
+  }
+};
 
 /**
  * Build a query that scopes an address operation to the authenticated user
@@ -8,7 +21,7 @@ import { TAddress } from './address.interface';
  */
 const userAddressQuery = (userId: string, id: string): any => ({
   userId,
-  _id: String(id).trim() as any,
+  _id: toObjectId(id),
 });
 
 /**
@@ -162,7 +175,7 @@ const setDefaultAddress = async (userId: string, id: string) => {
  */
 const clearOtherDefaults = async (userId: string, excludeId?: string) => {
   await addressCollection.updateMany(
-    { userId, isDefault: true, ...(excludeId ? { _id: { $ne: String(excludeId) as any } } : {}) },
+    { userId, isDefault: true, ...(excludeId ? { _id: { $ne: toObjectId(excludeId) as ObjectId } } : {}) },
     { $set: { isDefault: false } }
   );
 };
