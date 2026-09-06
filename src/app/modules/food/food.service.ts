@@ -5,13 +5,17 @@ import {
   buildFoodSortOptions,
   normalizeFoodDoc,
 } from './food.utils';
+import { calculateRestaurantDistance } from '../../utils/location.utils';
 
 /**
  * Get All Global Food Items across all restaurants
  * Uses MongoDB aggregation with $lookup to join restaurant data
  */
 const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
-  const { page = 1, limit = 12, sortBy, openNow, featuredOnly } = queryParams;
+  const { page = 1, limit = 12, sortBy, openNow, featuredOnly, lat, lng, latitude, longitude } = queryParams;
+
+  const userLat = lat || latitude ? parseFloat(String(lat || latitude)) : undefined;
+  const userLng = lng || longitude ? parseFloat(String(lng || longitude)) : undefined;
 
   const foodMatchQuery = buildFoodMongoQuery(queryParams);
   const sortOptions = buildFoodSortOptions(sortBy as string);
@@ -51,6 +55,8 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
             status: 1,
             rating: { $ifNull: ['$rating', 0] },
             totalReviews: { $ifNull: ['$totalReviews', 0] },
+            address: 1,
+            city: 1,
           },
         },
       ],
@@ -58,7 +64,7 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     },
   });
 
-  // Stage 3: Filter by restaurant-level conditions (openNow, featuredOnly)
+  // Stage 3: Filter by restaurant-level conditions (openNow, featuredOnly, city/location)
   if (openNow === true || openNow === 'true' || openNow === '1') {
     pipeline.push({
       $match: {
@@ -71,6 +77,21 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     pipeline.push({
       $match: {
         '_restaurant.isFeatured': true,
+      },
+    });
+  }
+
+  const activeCity = (queryParams.city || queryParams.location || '').trim();
+  if (activeCity && activeCity.toLowerCase() !== 'all') {
+    const cityRegex = new RegExp(activeCity, 'i');
+    pipeline.push({
+      $match: {
+        $or: [
+          { '_restaurant.address.city': cityRegex },
+          { '_restaurant.address.area': cityRegex },
+          { '_restaurant.address.fullAddress': cityRegex },
+          { '_restaurant.city': cityRegex },
+        ],
       },
     });
   }
@@ -110,7 +131,16 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
   const totalItems = facetResult.metadata[0]?.total || 0;
   const rawItems = facetResult.data || [];
 
-  const normalizedData = rawItems.map((doc: any) => normalizeFoodDoc(doc));
+  const normalizedData = rawItems.map((doc: any) => {
+    const restObj = Array.isArray(doc._restaurant) ? doc._restaurant[0] : doc._restaurant;
+    const dist = calculateRestaurantDistance(restObj || doc, userLat, userLng);
+    const norm = normalizeFoodDoc(doc);
+    return {
+      ...norm,
+      distanceKm: dist.distanceKm,
+      distanceText: dist.distanceText,
+    };
+  });
   const totalPages = Math.ceil(totalItems / limitNum) || 0;
 
   const pagination: IPaginationMeta = {
