@@ -2,6 +2,64 @@ import { ObjectId } from 'mongodb';
 import { TFoodQueryParams } from './food.interface';
 
 /**
+ * Helper to build strict, exact category matching regex
+ */
+export const buildCategoryMatchRegex = (categoryInput: string): RegExp => {
+  const clean = categoryInput.trim();
+  const lower = clean.toLowerCase();
+
+  // Escape special regex characters
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  if (lower === 'burger' || lower === 'burgers') {
+    return /^burgers?(?:\s.*)?$/i;
+  }
+  if (lower === 'pizza' || lower === 'pizzas') {
+    return /^pizzas?(?:\s.*)?$/i;
+  }
+  if (lower === 'biryani' || lower === 'biryanis') {
+    return /^biryanis?(?:\s.*)?$/i;
+  }
+  if (lower === 'pasta' || lower === 'pastas') {
+    return /^pastas?(?:\s.*)?$/i;
+  }
+  if (lower === 'dessert' || lower === 'desserts') {
+    return /^desserts?(?:\s.*)?$/i;
+  }
+  if (lower === 'drink' || lower === 'drinks' || lower === 'beverage' || lower === 'beverages') {
+    return /^(drinks?|beverages?)(?:\s.*)?$/i;
+  }
+  if (lower === 'healthy' || lower === 'salad' || lower === 'salads') {
+    return /^(healthy|salads?)(?:\s.*)?$/i;
+  }
+  if (lower === 'bbq' || lower === 'grill' || lower === 'bbq & grill') {
+    return /^(bbq|grill|bbq\s*&\s*grill)(?:\s.*)?$/i;
+  }
+  if (lower === 'sushi') {
+    return /^sushis?(?:\s.*)?$/i;
+  }
+  if (lower === 'chinese') {
+    return /^chinese(?:\s.*)?$/i;
+  }
+  if (lower === 'thai') {
+    return /^thai(?:\s.*)?$/i;
+  }
+  if (lower === 'soup' || lower === 'soups') {
+    return /^soups?(?:\s.*)?$/i;
+  }
+  if (lower === 'snack' || lower === 'snacks') {
+    return /^snacks?(?:\s.*)?$/i;
+  }
+  if (lower === 'seafood') {
+    return /^seafood(?:\s.*)?$/i;
+  }
+
+  // Fallback anchored prefix word regex
+  const base = escaped.replace(/s$/i, '');
+  return new RegExp(`^${base}s?(?:\\s.*)?$`, 'i');
+};
+
+/**
  * Build MongoDB Query Filter Object for global food items
  */
 export const buildFoodMongoQuery = (
@@ -20,7 +78,7 @@ export const buildFoodMongoQuery = (
 
   const queryFilters: Record<string, any>[] = [];
 
-  // Search keyword (matches name, description, tags, category)
+  // Search keyword (matches dish name, description, tags)
   const searchKeyword = (search || '').trim();
   if (searchKeyword) {
     const searchRegex = new RegExp(searchKeyword, 'i');
@@ -28,16 +86,15 @@ export const buildFoodMongoQuery = (
       $or: [
         { name: searchRegex },
         { description: searchRegex },
-        { category: searchRegex },
         { tags: { $elemMatch: { $regex: searchKeyword, $options: 'i' } } },
       ],
     });
   }
 
-  // Category filter
+  // Category filter (Strict anchored matching)
   const activeCategory = (category || '').trim();
   if (activeCategory && activeCategory.toLowerCase() !== 'all') {
-    const categoryRegex = new RegExp(activeCategory, 'i');
+    const categoryRegex = buildCategoryMatchRegex(activeCategory);
     queryFilters.push({ category: categoryRegex });
   }
 
