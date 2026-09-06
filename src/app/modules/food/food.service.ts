@@ -36,8 +36,7 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
           $match: {
             $expr: {
               $or: [
-                { $eq: ['$_id', { $toObjectId: '$$foodRestaurantId' }] },
-                { $eq: [{ $toString: '$_id' }, '$$foodRestaurantId'] },
+                { $eq: [{ $toString: '$_id' }, { $toString: '$$foodRestaurantId' }] },
               ],
             },
           },
@@ -86,29 +85,32 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     },
   });
 
-  // Stage 5: Count total (before sort/skip/limit)
-  const countPipeline = [...pipeline, { $count: 'total' }];
-  const countResult = await foodCollection.aggregate(countPipeline).toArray();
-  const totalItems = countResult[0]?.total || 0;
-
-  // Stage 6: Sort
+  // Stage 5: Sort
   pipeline.push({ $sort: sortOptions });
 
-  // Stage 7: Skip & Limit
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: limitNum });
-
-  // Stage 8: Add fields to flatten restaurant info
+  // Stage 6: Facet for single-query count and pagination data
   pipeline.push({
-    $addFields: {
-      restaurantId: { $toString: '$restaurantId' },
+    $facet: {
+      metadata: [{ $count: 'total' }],
+      data: [
+        { $skip: skip },
+        { $limit: limitNum },
+        {
+          $addFields: {
+            restaurantId: { $toString: '$restaurantId' },
+          },
+        },
+      ],
     },
   });
 
-  // Execute aggregation
-  const rawItems = await foodCollection.aggregate(pipeline).toArray();
-  const normalizedData = rawItems.map((doc) => normalizeFoodDoc(doc));
+  // Execute single aggregation query
+  const aggregationResult = await foodCollection.aggregate(pipeline).toArray();
+  const facetResult = aggregationResult[0] || { metadata: [], data: [] };
+  const totalItems = facetResult.metadata[0]?.total || 0;
+  const rawItems = facetResult.data || [];
 
+  const normalizedData = rawItems.map((doc: any) => normalizeFoodDoc(doc));
   const totalPages = Math.ceil(totalItems / limitNum) || 0;
 
   const pagination: IPaginationMeta = {
