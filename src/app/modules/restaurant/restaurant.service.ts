@@ -11,6 +11,7 @@ import {
   buildRestaurantSortOptions,
   normalizeRestaurantDoc,
 } from './restaurant.utils';
+import { calculateRestaurantDistance } from '../../utils/location.utils';
 
 /**
  * Create or Update Restaurant Profile
@@ -227,15 +228,66 @@ const toggleRestaurantStatus = async (ownerEmail: string | undefined, isOpen: bo
  * Get All Restaurants for Explore Page (Search, Category, Filter, Sort, Pagination)
  */
 const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
-  const { page = 1, limit = 9, sortBy } = queryParams;
+  const { page = 1, limit = 9, sortBy, lat, lng, latitude, longitude } = queryParams;
 
   const mongoQuery = buildRestaurantMongoQuery(queryParams);
   const sortOptions = buildRestaurantSortOptions(sortBy as string);
 
+  const userLat = lat || latitude ? parseFloat(String(lat || latitude)) : undefined;
+  const userLng = lng || longitude ? parseFloat(String(lng || longitude)) : undefined;
+
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
   const limitNum = Math.max(1, parseInt(String(limit), 10) || 9);
-  const skip = (pageNum - 1) * limitNum;
 
+  // If user provided valid GPS coordinates or asked for distance sorting, fetch matching items and sort by proximity
+  const isDistanceSortRequested = sortBy === 'distance' || (userLat !== undefined && userLng !== undefined && !sortBy);
+
+  if (isDistanceSortRequested || (userLat !== undefined && userLng !== undefined)) {
+    const rawItems = await restaurantCollection.find(mongoQuery).toArray();
+
+    // Attach distance and sort by proximity (closest first)
+    let sortedItems = rawItems.map((doc) => {
+      const dist = calculateRestaurantDistance(doc, userLat, userLng);
+      return {
+        ...doc,
+        distanceKm: dist.distanceKm,
+        distanceText: dist.distanceText,
+      };
+    });
+
+    if (isDistanceSortRequested || sortBy === 'distance') {
+      sortedItems.sort((a, b) => a.distanceKm - b.distanceKm);
+    }
+
+    const totalItems = sortedItems.length;
+    const skip = (pageNum - 1) * limitNum;
+    const paginatedItems = sortedItems.slice(skip, skip + limitNum);
+
+    const normalizedData = paginatedItems.map((doc) => normalizeRestaurantDoc(doc));
+    const totalPages = Math.ceil(totalItems / limitNum) || 0;
+
+    const pagination: IPaginationMeta = {
+      currentPage: pageNum,
+      totalPages,
+      totalItems,
+      itemsPerPage: limitNum,
+      hasNextPage: pageNum < totalPages,
+      hasPrevPage: pageNum > 1,
+    };
+
+    return {
+      data: normalizedData,
+      pagination,
+      meta: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalItems,
+        totalPage: totalPages || 1,
+      },
+    };
+  }
+
+  const skip = (pageNum - 1) * limitNum;
   const [totalItems, rawItems] = await Promise.all([
     restaurantCollection.countDocuments(mongoQuery),
     restaurantCollection
@@ -246,7 +298,14 @@ const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
       .toArray(),
   ]);
 
-  const normalizedData = rawItems.map((doc) => normalizeRestaurantDoc(doc));
+  const normalizedData = rawItems.map((doc) => {
+    const dist = calculateRestaurantDistance(doc, userLat, userLng);
+    return normalizeRestaurantDoc({
+      ...doc,
+      distanceKm: dist.distanceKm,
+      distanceText: dist.distanceText,
+    });
+  });
   const totalPages = Math.ceil(totalItems / limitNum) || 0;
 
   const pagination: IPaginationMeta = {
