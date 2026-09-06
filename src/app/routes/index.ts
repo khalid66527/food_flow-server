@@ -8,10 +8,15 @@ import { AddressRoutes } from '../modules/address/address.route';
 import { ContactRoutes } from '../modules/contact/contact.route';
 import { AiRoutes } from '../modules/ai/ai.route';
 import { OrderRoutes } from '../modules/order/order.route';
+import { CategoryRoutes } from '../modules/category/category.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/categories',
+    route: CategoryRoutes,
+  },
   {
     path: '/orders',
     route: OrderRoutes,
