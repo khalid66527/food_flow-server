@@ -109,14 +109,30 @@ export const buildFoodMongoQuery = (
     }
   }
 
-  // Vegetarian filter
+  // Vegetarian filter (matches boolean true, string 'true', tags 'veg'/'vegetarian'/'healthy'/'salad', or category 'healthy'/'salad')
   if (isVegetarian === true || isVegetarian === 'true' || isVegetarian === '1') {
-    queryFilters.push({ isVegetarian: true });
+    queryFilters.push({
+      $or: [
+        { isVegetarian: true },
+        { isVegetarian: 'true' },
+        { isVegetarian: 1 },
+        { tags: { $elemMatch: { $regex: 'veg|vegetarian|healthy|salad', $options: 'i' } } },
+        { category: { $regex: 'healthy|salad', $options: 'i' } },
+      ],
+    });
   }
 
-  // Spicy filter
+  // Spicy filter (matches boolean true, string 'true', tags 'spicy'/'hot'/'chili'/'curry'/'spiced', or categoryDetails)
   if (isSpicy === true || isSpicy === 'true' || isSpicy === '1') {
-    queryFilters.push({ isSpicy: true });
+    queryFilters.push({
+      $or: [
+        { isSpicy: true },
+        { isSpicy: 'true' },
+        { isSpicy: 1 },
+        { tags: { $elemMatch: { $regex: 'spicy|hot|chili|curry|spiced', $options: 'i' } } },
+        { 'categoryDetails.spicyLevel': { $exists: true, $ne: 'mild' } },
+      ],
+    });
   }
 
   // Status filter (default to available)
