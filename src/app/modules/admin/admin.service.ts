@@ -227,7 +227,13 @@ const getUserById = async (userIdOrEmail: string) => {
     } catch (e) {}
   }
 
-  const user = await collection.findOne({ $or: query });
+  let user = await collection.findOne({ $or: query });
+  if (!user) {
+    const fallbackUsers = db.collection('users');
+    if (fallbackUsers !== collection) {
+      user = await fallbackUsers.findOne({ $or: query });
+    }
+  }
   if (!user) return null;
 
   let restaurant = null;
@@ -249,7 +255,7 @@ const getUserById = async (userIdOrEmail: string) => {
     name: user.name,
     email: user.email,
     emailVerified: Boolean(user.emailVerified),
-    image: user.image || user.avatar || '',
+    image: user.image || user.avatar || user.photo || '',
     role: standardizeRole(user.role),
     phone: user.phone || '',
     status: user.status || 'active',
@@ -376,6 +382,13 @@ const updateUser = async (userId: string, payload: Partial<TUser>) => {
   }
 
   const result = await collection.updateOne({ $or: query }, { $set: updateDoc });
+
+  // Update fallback collection as well if present
+  const fallbackUsers = db.collection('users');
+  if (fallbackUsers !== collection) {
+    await fallbackUsers.updateOne({ $or: query }, { $set: updateDoc }).catch(() => {});
+  }
+
   return result;
 };
 

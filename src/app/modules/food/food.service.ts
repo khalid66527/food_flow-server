@@ -5,13 +5,17 @@ import {
   buildFoodSortOptions,
   normalizeFoodDoc,
 } from './food.utils';
+import { calculateRestaurantDistance } from '../../utils/location.utils';
 
 /**
  * Get All Global Food Items across all restaurants
  * Uses MongoDB aggregation with $lookup to join restaurant data
  */
 const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
-  const { page = 1, limit = 12, sortBy, openNow, featuredOnly } = queryParams;
+  const { page = 1, limit = 12, sortBy, openNow, featuredOnly, lat, lng, latitude, longitude } = queryParams;
+
+  const userLat = lat || latitude ? parseFloat(String(lat || latitude)) : undefined;
+  const userLng = lng || longitude ? parseFloat(String(lng || longitude)) : undefined;
 
   const foodMatchQuery = buildFoodMongoQuery(queryParams);
   const sortOptions = buildFoodSortOptions(sortBy as string);
@@ -36,8 +40,7 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
           $match: {
             $expr: {
               $or: [
-                { $eq: ['$_id', { $toObjectId: '$$foodRestaurantId' }] },
-                { $eq: [{ $toString: '$_id' }, '$$foodRestaurantId'] },
+                { $eq: [{ $toString: '$_id' }, { $toString: '$$foodRestaurantId' }] },
               ],
             },
           },
@@ -52,6 +55,8 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
             status: 1,
             rating: { $ifNull: ['$rating', 0] },
             totalReviews: { $ifNull: ['$totalReviews', 0] },
+            address: 1,
+            city: 1,
           },
         },
       ],
@@ -59,7 +64,7 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     },
   });
 
-  // Stage 3: Filter by restaurant-level conditions (openNow, featuredOnly)
+  // Stage 3: Filter by restaurant-level conditions (openNow, featuredOnly, city/location)
   if (openNow === true || openNow === 'true' || openNow === '1') {
     pipeline.push({
       $match: {
@@ -76,6 +81,21 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     });
   }
 
+  const activeCity = (queryParams.city || queryParams.location || '').trim();
+  if (activeCity && activeCity.toLowerCase() !== 'all') {
+    const cityRegex = new RegExp(activeCity, 'i');
+    pipeline.push({
+      $match: {
+        $or: [
+          { '_restaurant.address.city': cityRegex },
+          { '_restaurant.address.area': cityRegex },
+          { '_restaurant.address.fullAddress': cityRegex },
+          { '_restaurant.city': cityRegex },
+        ],
+      },
+    });
+  }
+
   // Stage 4: Filter out food from inactive restaurants
   pipeline.push({
     $match: {
@@ -86,29 +106,41 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     },
   });
 
-  // Stage 5: Count total (before sort/skip/limit)
-  const countPipeline = [...pipeline, { $count: 'total' }];
-  const countResult = await foodCollection.aggregate(countPipeline).toArray();
-  const totalItems = countResult[0]?.total || 0;
-
-  // Stage 6: Sort
+  // Stage 5: Sort
   pipeline.push({ $sort: sortOptions });
 
-  // Stage 7: Skip & Limit
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: limitNum });
-
-  // Stage 8: Add fields to flatten restaurant info
+  // Stage 6: Facet for single-query count and pagination data
   pipeline.push({
-    $addFields: {
-      restaurantId: { $toString: '$restaurantId' },
+    $facet: {
+      metadata: [{ $count: 'total' }],
+      data: [
+        { $skip: skip },
+        { $limit: limitNum },
+        {
+          $addFields: {
+            restaurantId: { $toString: '$restaurantId' },
+          },
+        },
+      ],
     },
   });
 
-  // Execute aggregation
-  const rawItems = await foodCollection.aggregate(pipeline).toArray();
-  const normalizedData = rawItems.map((doc) => normalizeFoodDoc(doc));
+  // Execute single aggregation query
+  const aggregationResult = await foodCollection.aggregate(pipeline).toArray();
+  const facetResult = aggregationResult[0] || { metadata: [], data: [] };
+  const totalItems = facetResult.metadata[0]?.total || 0;
+  const rawItems = facetResult.data || [];
 
+  const normalizedData = rawItems.map((doc: any) => {
+    const restObj = Array.isArray(doc._restaurant) ? doc._restaurant[0] : doc._restaurant;
+    const dist = calculateRestaurantDistance(restObj || doc, userLat, userLng);
+    const norm = normalizeFoodDoc(doc);
+    return {
+      ...norm,
+      distanceKm: dist.distanceKm,
+      distanceText: dist.distanceText,
+    };
+  });
   const totalPages = Math.ceil(totalItems / limitNum) || 0;
 
   const pagination: IPaginationMeta = {
