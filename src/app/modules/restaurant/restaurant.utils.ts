@@ -15,6 +15,36 @@ export const generateSlug = (name: string): string => {
   );
 };
 
+export const buildLocationRegex = (locName: string): RegExp => {
+  const clean = locName.trim();
+  const lower = clean.toLowerCase();
+
+  if (lower.includes('moulvi') || lower.includes('maulavi') || lower.includes('moulvibazar')) {
+    return /(moulvi|maulavi|moulavibazar|moulvibazar)/i;
+  }
+  if (lower.includes('chattogram') || lower.includes('chittagong')) {
+    return /(chattogram|chittagong)/i;
+  }
+  if (lower.includes('cumilla') || lower.includes('comilla')) {
+    return /(cumilla|comilla)/i;
+  }
+  if (lower.includes('barishal') || lower.includes('barisal')) {
+    return /(barishal|barisal)/i;
+  }
+  if (lower.includes('bogura') || lower.includes('bogra')) {
+    return /(bogura|bogra)/i;
+  }
+  if (lower.includes('jashore') || lower.includes('jessore')) {
+    return /(jashore|jessore)/i;
+  }
+  if (lower.includes("cox's bazar") || lower.includes('coxsbazar') || lower.includes('coxs bazar')) {
+    return /(cox'?s?\s*bazar)/i;
+  }
+
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+};
+
 /**
  * Build MongoDB Query Filter Object based on frontend query parameters
  */
@@ -79,16 +109,55 @@ export const buildRestaurantMongoQuery = (
     }
   }
 
-  // Location / City filter
+  // Hierarchical Location / Upazila / District / Division / City filter
+  const { upazila, district, division } = queryParams;
   const activeLocation = (location || city || '').trim();
-  if (activeLocation) {
-    const locationRegex = new RegExp(activeLocation, 'i');
+
+  if (upazila && upazila.toLowerCase() !== 'all') {
+    const upazilaRegex = buildLocationRegex(upazila);
+    queryFilters.push({
+      $or: [
+        { 'address.upazila': upazilaRegex },
+        { 'address.area': upazilaRegex },
+        { 'address.postalCode': upazilaRegex },
+        { 'address.street': upazilaRegex },
+        { 'address.fullAddress': upazilaRegex },
+      ],
+    });
+  } else if (district && district.toLowerCase() !== 'all') {
+    const districtRegex = buildLocationRegex(district);
+    queryFilters.push({
+      $or: [
+        { 'address.district': districtRegex },
+        { 'address.state': districtRegex },
+        { 'address.city': districtRegex },
+        { 'address.fullAddress': districtRegex },
+        { city: districtRegex },
+      ],
+    });
+  } else if (division && division.toLowerCase() !== 'all') {
+    const divisionRegex = buildLocationRegex(division);
+    queryFilters.push({
+      $or: [
+        { 'address.division': divisionRegex },
+        { 'address.city': divisionRegex },
+        { 'address.state': divisionRegex },
+        { 'address.fullAddress': divisionRegex },
+        { city: divisionRegex },
+      ],
+    });
+  } else if (activeLocation && activeLocation.toLowerCase() !== 'all') {
+    const locationRegex = buildLocationRegex(activeLocation);
     queryFilters.push({
       $or: [
         { 'address.city': locationRegex },
-        { 'address.area': locationRegex },
-        { 'address.street': locationRegex },
+        { 'address.division': locationRegex },
+        { 'address.district': locationRegex },
         { 'address.state': locationRegex },
+        { 'address.area': locationRegex },
+        { 'address.upazila': locationRegex },
+        { 'address.street': locationRegex },
+        { 'address.fullAddress': locationRegex },
       ],
     });
   }

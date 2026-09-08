@@ -93,6 +93,9 @@ export interface TRestaurantQueryParams {
   restaurantId?: string;
   city?: string;
   location?: string;
+  division?: string;
+  district?: string;
+  upazila?: string;
   lat?: string | number;
   lng?: string | number;
   latitude?: string | number;
