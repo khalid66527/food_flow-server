@@ -147,6 +147,11 @@ const getAllRestaurants = async (req: Request, res: Response): Promise<void> => 
       featuredOnly: req.query.featuredOnly as string,
       location: (req.query.location as string) || (req.query.city as string),
       city: (req.query.city as string) || (req.query.location as string),
+      division: (req.query.division as string) || '',
+      district: (req.query.district as string) || '',
+      upazila: (req.query.upazila as string) || '',
+      lat: (req.query.lat as string) || (req.query.latitude as string),
+      lng: (req.query.lng as string) || (req.query.longitude as string),
       page: req.query.page as string,
       limit: req.query.limit as string,
     };

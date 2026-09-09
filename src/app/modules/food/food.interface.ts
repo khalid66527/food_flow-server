@@ -54,6 +54,15 @@ export interface TFoodQueryParams {
   maxPrice?: string | number;
   openNow?: string | boolean;
   featuredOnly?: string | boolean;
+  city?: string;
+  location?: string;
+  division?: string;
+  district?: string;
+  upazila?: string;
+  lat?: string | number;
+  lng?: string | number;
+  latitude?: string | number;
+  longitude?: string | number;
   page?: string | number;
   limit?: string | number;
 }

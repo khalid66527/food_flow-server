@@ -93,7 +93,14 @@ export interface TRestaurantQueryParams {
   restaurantId?: string;
   city?: string;
   location?: string;
-  sortBy?: 'relevance' | 'rating_desc' | 'delivery_time_asc' | 'delivery_fee_asc' | 'min_order_asc' | 'popular' | string;
+  division?: string;
+  district?: string;
+  upazila?: string;
+  lat?: string | number;
+  lng?: string | number;
+  latitude?: string | number;
+  longitude?: string | number;
+  sortBy?: 'relevance' | 'rating_desc' | 'delivery_time_asc' | 'delivery_fee_asc' | 'min_order_asc' | 'popular' | 'distance' | string;
   priceRange?: '$' | '$$' | '$$$' | '$$$$' | 'ALL' | string;
   minRating?: string | number;
   freeDelivery?: string | boolean;
