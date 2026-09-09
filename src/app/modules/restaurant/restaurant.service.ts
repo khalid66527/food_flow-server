@@ -113,7 +113,7 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
     minOrderAmount: Number(payload.minOrderAmount) || 0,
     priceRange: payload.priceRange || '$$',
     isOpen: payload.isOpen ?? true,
-    status: payload.status || 'active',
+    status: payload.status || 'pending',
     isFeatured: payload.isFeatured ?? false,
     discountOffer: payload.discountOffer || '',
     createdAt: new Date().toISOString(),
@@ -180,7 +180,7 @@ const updateMyRestaurantProfile = async (
     return null;
   }
 
-  const { _id, ...restPayload } = payload;
+  const { _id, status, ...restPayload } = payload;
   const updateData = { ...restPayload, updatedAt: new Date().toISOString() };
 
   const result = await restaurantCollection.findOneAndUpdate(
@@ -287,6 +287,29 @@ const addFoodItem = async (foodData: Record<string, any>) => {
     throw new Error('Restaurant ID is required.');
   }
 
+  const rawRestId = String(foodData.restaurantId).trim();
+  const restQueries: Record<string, any>[] = [
+    { slug: rawRestId },
+    { ownerEmail: rawRestId },
+    { ownerId: rawRestId },
+    { contactEmail: rawRestId },
+  ];
+
+  if (ObjectId.isValid(rawRestId)) {
+    try {
+      restQueries.push({ _id: new ObjectId(rawRestId) });
+    } catch (e) {}
+  }
+
+  const restaurant = await restaurantCollection.findOne({ $or: restQueries });
+  if (!restaurant) {
+    throw new Error('Restaurant profile not found. You must create and complete your restaurant profile first.');
+  }
+
+  if ((restaurant.status || '').toLowerCase() !== 'active') {
+    throw new Error('Your restaurant is pending approval by admin. You cannot add food items until your restaurant is approved.');
+  }
+
   // Status ("available" | "unavailable") maps to the isAvailable flag
   let isAvailable: boolean;
   if (typeof foodData.isAvailable === 'boolean') {
@@ -361,7 +384,7 @@ const getRestaurantMenu = async (restaurantId: string) => {
 const updateFoodItem = async (foodId: string, updateData: Record<string, any>) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
 
   const sanitizedUpdate: Record<string, any> = { ...updateData };
   delete sanitizedUpdate._id;
@@ -403,7 +426,7 @@ const updateFoodItem = async (foodId: string, updateData: Record<string, any>) =
 const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
   const status = isAvailable ? 'available' : 'unavailable';
 
   const result = await foodCollection.findOneAndUpdate(
@@ -427,7 +450,7 @@ const toggleFoodAvailability = async (foodId: string, isAvailable: boolean) => {
 const deleteFoodItem = async (foodId: string) => {
   if (!foodId) throw new Error("Food ID is required");
 
-  const query = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
   const result = await foodCollection.deleteOne(query);
   return result.deletedCount > 0;
 };
@@ -438,7 +461,7 @@ const deleteFoodItem = async (foodId: string) => {
 const getFoodItemById = async (foodId: string) => {
   if (!foodId) return null;
 
-  const query = ObjectId.isValid(foodId)
+  const query: any = ObjectId.isValid(foodId)
     ? { $or: [{ _id: new ObjectId(foodId) }, { _id: foodId }] }
     : { _id: foodId };
 
@@ -447,7 +470,7 @@ const getFoodItemById = async (foodId: string) => {
 
   let restaurantDoc = null;
   if (foodDoc.restaurantId) {
-    const restQuery = ObjectId.isValid(foodDoc.restaurantId)
+    const restQuery: any = ObjectId.isValid(foodDoc.restaurantId)
       ? {
           $or: [
             { _id: new ObjectId(foodDoc.restaurantId) },
@@ -476,7 +499,7 @@ const getFoodItemById = async (foodId: string) => {
 const getSingleRestaurant = async (idOrSlug: string) => {
   if (!idOrSlug) return null;
 
-  const query = ObjectId.isValid(idOrSlug)
+  const query: any = ObjectId.isValid(idOrSlug)
     ? {
         $or: [
           { _id: new ObjectId(idOrSlug) },
