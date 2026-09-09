@@ -1,4 +1,4 @@
-import { ordersCollection, cartCollection, settingsCollection, couponsCollection } from '../../config/db';
+import { ordersCollection, cartCollection, successOrdersCollection, settingsCollection, couponsCollection } from '../../config/db';
 import { ObjectId } from 'mongodb';
 
 export class OrderService {
@@ -115,12 +115,63 @@ export class OrderService {
       queryConditions.push({ _id: new ObjectId(id) });
     }
 
-    const updateDoc = {
+    const order = await ordersCollection.findOne({ $or: queryConditions });
+    if (!order) return null;
+
+    // Handle OTP verification when marking as Delivered
+    if (updates.orderStatus === 'Delivered' && order.deliveryOtp) {
+      const inputOtp = (updates.otp || updates.deliveryOtp || '').toString().trim();
+      if (!inputOtp || inputOtp !== order.deliveryOtp.trim()) {
+        throw new Error('Invalid OTP. Please provide the correct 6-digit delivery verification OTP.');
+      }
+    }
+
+    const updateDoc: any = {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
 
+    if (updates.orderStatus === 'Out for Delivery' && !order.deliveryOtp) {
+      updateDoc.deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      updateDoc.deliveryOtpCreatedAt = new Date().toISOString();
+    }
+
+    if (updates.orderStatus === 'Delivered') {
+      updateDoc.deliveryStatus = 'Delivered';
+      updateDoc.deliveredAt = updateDoc.deliveredAt || new Date().toISOString();
+      updateDoc.paymentStatus = 'Paid';
+      if (updates.riderInfo) {
+        updateDoc.riderInfo = {
+          ...updates.riderInfo,
+          deliveredAt: updateDoc.deliveredAt,
+        };
+      }
+    }
+
     await ordersCollection.updateOne({ $or: queryConditions }, { $set: updateDoc });
-    return await ordersCollection.findOne({ $or: queryConditions });
+    const updatedOrder = await ordersCollection.findOne({ $or: queryConditions });
+
+    if (updates.orderStatus === 'Delivered' && updatedOrder) {
+      try {
+        const successDoc = {
+          ...updatedOrder,
+          orderStatus: 'Delivered',
+          deliveryStatus: 'Delivered',
+          deliveredAt: updateDoc.deliveredAt || new Date().toISOString(),
+          paymentStatus: 'Paid',
+          storedAt: new Date().toISOString(),
+        };
+        delete (successDoc as any)._id;
+        await successOrdersCollection.updateOne(
+          { orderId: updatedOrder.orderId },
+          { $set: successDoc },
+          { upsert: true }
+        );
+      } catch (sErr) {
+        console.warn('Could not save to successOrdersCollection in server:', sErr);
+      }
+    }
+
+    return updatedOrder;
   }
 }

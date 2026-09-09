@@ -29,6 +29,8 @@ export const ordersCollection: Collection = db.collection('orders');
 export const categoryCollection: Collection = db.collection('category');
 export const settingsCollection: Collection = db.collection('platform_settings');
 export const couponsCollection: Collection = db.collection('coupons');
+export const successOrdersCollection: Collection = db.collection('successorders');
+
 export async function connectDB() {
   try {
     await client.connect();
