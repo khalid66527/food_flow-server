@@ -64,10 +64,26 @@ export class OrderService {
       queryConditions.push({ _id: new ObjectId(id) });
     }
 
+    const order = await ordersCollection.findOne({ $or: queryConditions });
+    if (!order) return null;
+
+    // Handle OTP verification when marking as Delivered
+    if (updates.orderStatus === 'Delivered' && order.deliveryOtp) {
+      const inputOtp = (updates.otp || updates.deliveryOtp || '').toString().trim();
+      if (!inputOtp || inputOtp !== order.deliveryOtp.trim()) {
+        throw new Error('Invalid OTP. Please provide the correct 6-digit delivery verification OTP.');
+      }
+    }
+
     const updateDoc: any = {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
+
+    if (updates.orderStatus === 'Out for Delivery' && !order.deliveryOtp) {
+      updateDoc.deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      updateDoc.deliveryOtpCreatedAt = new Date().toISOString();
+    }
 
     if (updates.orderStatus === 'Delivered') {
       updateDoc.deliveryStatus = 'Delivered';
@@ -108,3 +124,4 @@ export class OrderService {
     return updatedOrder;
   }
 }
+
