@@ -1,4 +1,4 @@
-import { ordersCollection, cartCollection } from '../../config/db';
+import { ordersCollection, cartCollection, successOrdersCollection } from '../../config/db';
 import { ObjectId } from 'mongodb';
 
 export class OrderService {
@@ -64,12 +64,47 @@ export class OrderService {
       queryConditions.push({ _id: new ObjectId(id) });
     }
 
-    const updateDoc = {
+    const updateDoc: any = {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
 
+    if (updates.orderStatus === 'Delivered') {
+      updateDoc.deliveryStatus = 'Delivered';
+      updateDoc.deliveredAt = updateDoc.deliveredAt || new Date().toISOString();
+      updateDoc.paymentStatus = 'Paid';
+      if (updates.riderInfo) {
+        updateDoc.riderInfo = {
+          ...updates.riderInfo,
+          deliveredAt: updateDoc.deliveredAt,
+        };
+      }
+    }
+
     await ordersCollection.updateOne({ $or: queryConditions }, { $set: updateDoc });
-    return await ordersCollection.findOne({ $or: queryConditions });
+    const updatedOrder = await ordersCollection.findOne({ $or: queryConditions });
+
+    if (updates.orderStatus === 'Delivered' && updatedOrder) {
+      try {
+        const successDoc = {
+          ...updatedOrder,
+          orderStatus: 'Delivered',
+          deliveryStatus: 'Delivered',
+          deliveredAt: updateDoc.deliveredAt || new Date().toISOString(),
+          paymentStatus: 'Paid',
+          storedAt: new Date().toISOString(),
+        };
+        delete (successDoc as any)._id;
+        await successOrdersCollection.updateOne(
+          { orderId: updatedOrder.orderId },
+          { $set: successDoc },
+          { upsert: true }
+        );
+      } catch (sErr) {
+        console.warn('Could not save to successOrdersCollection in server:', sErr);
+      }
+    }
+
+    return updatedOrder;
   }
 }
