@@ -10,18 +10,15 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
       credentials: true,
     },
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
   });
 
   io.on('connection', (socket: Socket) => {
-    console.log(`⚡ Socket connected: ${socket.id}`);
-
     // Join room for specific order
     socket.on('join_order_room', (data: any) => {
       const orderId = typeof data === 'string' ? data : data?.orderId;
       if (orderId) {
         socket.join(orderId);
-        console.log(`📌 Socket ${socket.id} joined room: ${orderId}`);
       }
     });
 
@@ -30,7 +27,6 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       const room = typeof data === 'string' ? data : data?.room;
       if (room) {
         socket.join(room);
-        console.log(`📌 Socket ${socket.id} joined room: ${room}`);
       }
     });
 
@@ -56,8 +52,8 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       io?.emit('update_rider_location', data);
     });
 
-    socket.on('disconnect', (reason) => {
-      console.log(`🔌 Socket disconnected: ${socket.id} (Reason: ${reason})`);
+    socket.on('disconnect', () => {
+      // Disconnected silently
     });
   });
 
