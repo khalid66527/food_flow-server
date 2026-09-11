@@ -1,6 +1,8 @@
+import http from "http";
 import app from "./app";
 import config from "./app/config";
 import { connectDB, client, db, restaurantCollection } from "./app/config/db";
+import { initSocket } from "./app/socket";
 
 // Re-exporting for backward compatibility if needed
 export { client, db, restaurantCollection };
@@ -10,11 +12,16 @@ async function bootstrap() {
     // Connect to MongoDB
     await connectDB();
 
+    const server = http.createServer(app);
+
+    // Initialize Socket.IO
+    initSocket(server);
+
     // Start Server (avoid double listening in Vercel serverless environment)
     if (!config.is_vercel) {
-      app.listen(config.port, () => {
+      server.listen(config.port, () => {
         console.log(
-          `🚀 Food Flow Server is running on http://localhost:${config.port}`,
+          `🚀 Food Flow Server (with Socket.IO) is running on http://localhost:${config.port}`,
         );
       });
     }
@@ -25,3 +32,4 @@ async function bootstrap() {
 }
 
 bootstrap().catch(console.dir);
+

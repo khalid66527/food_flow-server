@@ -1,5 +1,6 @@
 import { ordersCollection, cartCollection, successOrdersCollection, settingsCollection, couponsCollection } from '../../config/db';
 import { ObjectId } from 'mongodb';
+import { emitOrderStatusUpdate, emitNewOrder } from '../../socket';
 
 export class OrderService {
   static async createOrder(payload: any, userId: string, userEmail: string) {
@@ -84,10 +85,19 @@ export class OrderService {
       await cartCollection.deleteOne({ userId });
     }
 
+    const createdOrder = { ...orderDoc, _id: mongoId };
+
+    // Emit real-time new order event to restaurants and admins
+    try {
+      emitNewOrder(createdOrder);
+    } catch (e) {
+      console.warn('Socket emit new order error:', e);
+    }
+
     return {
       orderId,
       mongoId,
-      order: { ...orderDoc, _id: mongoId },
+      order: createdOrder,
     };
   }
 
@@ -169,6 +179,15 @@ export class OrderService {
         );
       } catch (sErr) {
         console.warn('Could not save to successOrdersCollection in server:', sErr);
+      }
+    }
+
+    // Broadcast real-time order status update to customers, riders, and restaurants
+    if (updatedOrder) {
+      try {
+        emitOrderStatusUpdate(updatedOrder.orderId, updatedOrder);
+      } catch (e) {
+        console.warn('Socket emit order update error:', e);
       }
     }
 
