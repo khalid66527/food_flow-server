@@ -1,4 +1,4 @@
-import { foodCollection } from '../../config/db';
+import { foodCollection, categoryCollection } from '../../config/db';
 import { TFoodQueryParams, IPaginationMeta } from './food.interface';
 import {
   buildFoodMongoQuery,
@@ -248,14 +248,42 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
 };
 
 /**
- * Get all distinct non-empty category values from the food collection
+ * Get all distinct non-empty category values from food collection & category collection
  */
 const getDistinctCategories = async (): Promise<string[]> => {
-  const categories = await foodCollection
-    .distinct('category', { category: { $exists: true, $ne: '' } });
-  return categories
-    .filter((c): c is string => typeof c === 'string' && c.trim() !== '')
-    .sort((a, b) => a.localeCompare(b));
+  const result = await foodCollection
+    .aggregate([
+      {
+        $match: {
+          category: { $exists: true, $ne: '' },
+        },
+      },
+      {
+        $group: {
+          _id: '$category',
+        },
+      },
+    ])
+    .toArray();
+
+  const foodCategories = result
+    .map((doc) => (typeof doc._id === 'string' ? doc._id.trim() : ''))
+    .filter((c) => c !== '');
+
+  let dbCategories: string[] = [];
+  try {
+    const categoriesFromDb = await categoryCollection
+      .find({ isActive: true }, { projection: { name: 1 } })
+      .toArray();
+    dbCategories = categoriesFromDb
+      .map((c) => (typeof c.name === 'string' ? c.name.trim() : ''))
+      .filter((c) => c !== '');
+  } catch (err) {
+    // ignore fallback error
+  }
+
+  const combined = Array.from(new Set([...foodCategories, ...dbCategories]));
+  return combined.sort((a, b) => a.localeCompare(b));
 };
 
 export const FoodService = {
