@@ -11,10 +11,15 @@ import { OrderRoutes } from '../modules/order/order.route';
 import { CategoryRoutes } from '../modules/category/category.route';
 import { SettingsRoutes } from '../modules/settings/settings.route';
 import { CouponRoutes } from '../modules/coupon/coupon.route';
+import { AuthRoutes } from '../modules/auth/auth.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/auth',
+    route: AuthRoutes,
+  },
   {
     path: '/settings',
     route: SettingsRoutes,
