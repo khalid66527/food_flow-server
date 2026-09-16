@@ -2,11 +2,32 @@ import { Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { TUserRole, IChatMessage } from './ai.interface';
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error('GEMINI_API_KEY is not set in environment variables');
-}
+// Helper function to extract all configured Gemini API keys from environment
+const getGeminiApiKeys = (): string[] => {
+  const envKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5,
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY_1,
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY_2,
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY_3,
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY_4,
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY_5,
+  ];
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  if (process.env.GEMINI_API_KEYS) {
+    envKeys.push(...process.env.GEMINI_API_KEYS.split(','));
+  }
+
+  const uniqueKeys = Array.from(
+    new Set(envKeys.map((k) => (k || '').trim()).filter(Boolean))
+  );
+
+  return uniqueKeys;
+};
 
 const SYSTEM_PROMPTS: Record<TUserRole, string> = {
   customer: `You are FoodFlow's customer support assistant. You help customers with:
@@ -82,16 +103,54 @@ const chat = async (req: Request, res: Response): Promise<void> => {
       },
     };
 
-    let response;
-    try {
-      response = await ai.models.generateContent({ model: 'gemini-3.6-flash', ...generateConfig });
-    } catch (err: any) {
-      if (err?.status === 404 || err?.message?.includes('404')) {
-        console.warn('gemini-3.6-flash not found, falling back to gemini-1.5-flash');
-        response = await ai.models.generateContent({ model: 'gemini-1.5-flash', ...generateConfig });
-      } else {
-        throw err;
+    const keys = getGeminiApiKeys();
+    if (keys.length === 0) {
+      res.status(500).json({
+        success: false,
+        error: 'No Gemini API key configured on server.',
+      });
+      return;
+    }
+
+    let response: any = null;
+    let lastError: any = null;
+
+    // Key Rotation Loop: retry with next key seamlessly on rate limit / error
+    for (let i = 0; i < keys.length; i++) {
+      const apiKey = keys[i];
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+
+        try {
+          response = await ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            ...generateConfig,
+          });
+        } catch (err: any) {
+          if (err?.status === 404 || err?.message?.includes('404')) {
+            console.warn('gemini-3.6-flash not found, falling back to gemini-1.5-flash');
+            response = await ai.models.generateContent({
+              model: 'gemini-1.5-flash',
+              ...generateConfig,
+            });
+          } else {
+            throw err;
+          }
+        }
+
+        if (response) {
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(
+          `[AI Key Rotation] Key ${i + 1}/${keys.length} failed (${err?.status || err?.message || 'error'}). Switching to next key...`
+        );
       }
+    }
+
+    if (!response) {
+      throw lastError || new Error('All Gemini API keys failed or rate-limited.');
     }
 
     res.status(200).json({
