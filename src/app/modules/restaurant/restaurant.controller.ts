@@ -364,6 +364,103 @@ const getSingleRestaurant = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+/**
+ * Get Grocery Foods strictly for a specific Restaurant
+ */
+const getRestaurantGroceryItems = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    if (!restaurantId || !String(restaurantId).trim()) {
+      res.status(400).json({
+        success: false,
+        message: 'Restaurant ID is required',
+        data: [],
+      });
+      return;
+    }
+
+    const items = await RestaurantService.getRestaurantGroceryFoods(restaurantId);
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant grocery items fetched successfully',
+      data: items,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to fetch restaurant grocery items',
+      data: [],
+    });
+  }
+};
+
+/**
+ * Aggregate Grocery Ingredient List for selected dishes & quantities
+ */
+const aggregateGroceryList = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId, selectedItems } = req.body;
+    if (!restaurantId || !String(restaurantId).trim()) {
+      res.status(400).json({
+        success: false,
+        message: 'Restaurant ID is required for grocery aggregation',
+      });
+      return;
+    }
+
+    if (!Array.isArray(selectedItems) || selectedItems.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'At least one food item must be selected for aggregation',
+      });
+      return;
+    }
+
+    const result = await RestaurantService.aggregateGroceryList(restaurantId, selectedItems);
+    res.status(200).json({
+      success: true,
+      message: 'Grocery ingredients aggregated successfully',
+      data: result,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to aggregate grocery ingredients',
+    });
+  }
+};
+
+/**
+ * Update Secret Grocery Raw Materials / Ingredients for a specific food item
+ */
+const updateFoodSecretRecipe = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { foodId } = req.params;
+    const { ingredients } = req.body;
+
+    if (!foodId) {
+      res.status(400).json({
+        success: false,
+        message: 'Food ID is required',
+      });
+      return;
+    }
+
+    const updated = await RestaurantService.updateFoodSecretRecipe(foodId, ingredients);
+
+    res.status(200).json({
+      success: true,
+      message: 'Secret recipe raw materials saved successfully',
+      data: updated,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to update food secret recipe',
+    });
+  }
+};
+
 export const RestaurantController = {
   createRestaurant,
   getMyProfile,
@@ -377,5 +474,9 @@ export const RestaurantController = {
   deleteFoodItem,
   getFoodItemDetails,
   getSingleRestaurant,
+  getRestaurantGroceryItems,
+  aggregateGroceryList,
+  updateFoodSecretRecipe,
 };
+
 
