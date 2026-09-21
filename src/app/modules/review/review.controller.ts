@@ -104,4 +104,36 @@ export class ReviewController {
       });
     }
   }
+
+  static async toggleReviewFeatured(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { isFeatured } = req.body || {};
+      const result = await ReviewService.toggleReviewFeatured(id, isFeatured);
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Error toggling review featured status:', error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to update review featured status.',
+      });
+    }
+  }
+
+  static async getFeaturedTestimonials(req: Request, res: Response) {
+    try {
+      const { starFilter } = req.query;
+      const result = await ReviewService.getFeaturedTestimonials(starFilter as string);
+      return res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('Error fetching featured testimonials:', error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to fetch testimonials.',
+      });
+    }
+  }
 }

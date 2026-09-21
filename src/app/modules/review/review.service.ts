@@ -319,4 +319,85 @@ export class ReviewService {
       reviews: allReviews,
     };
   }
+
+  /**
+   * Toggle or set isFeatured status for a review
+   */
+  static async toggleReviewFeatured(reviewId: string, isFeatured?: boolean) {
+    const queryConditions: any[] = [{ _id: reviewId }];
+    if (ObjectId.isValid(reviewId)) {
+      queryConditions.push({ _id: new ObjectId(reviewId) });
+    }
+
+    const reviewDoc = await reviewCollection.findOne({ $or: queryConditions });
+    if (!reviewDoc) {
+      throw new Error(`Review not found for ID: ${reviewId}`);
+    }
+
+    const nextFeatured = typeof isFeatured === 'boolean' ? isFeatured : !reviewDoc.isFeatured;
+
+    await reviewCollection.updateOne(
+      { $or: queryConditions },
+      { $set: { isFeatured: nextFeatured, updatedAt: new Date().toISOString() } }
+    );
+
+    return {
+      success: true,
+      reviewId,
+      isFeatured: nextFeatured,
+      message: nextFeatured ? 'Review marked as featured on homepage!' : 'Review unfeatured.',
+    };
+  }
+
+  /**
+   * Get Featured & Approved Testimonials for Public Homepage with optional rating star filtering
+   */
+  static async getFeaturedTestimonials(starFilter?: string | number) {
+    const query: any = { isFeatured: true };
+
+    if (starFilter && starFilter !== 'all' && Number(starFilter) > 0) {
+      query.rating = Number(starFilter);
+    }
+
+    let reviews = await reviewCollection.find(query).sort({ createdAt: -1 }).toArray();
+
+    // Fallback: If no reviews have been explicitly featured by Admin yet, fetch top rated (4-5 star) reviews
+    if (reviews.length === 0) {
+      const fallbackQuery: any = {};
+      if (starFilter && starFilter !== "all" && Number(starFilter) > 0) {
+        fallbackQuery.rating = Number(starFilter);
+      } else {
+        fallbackQuery.rating = { $gte: 4 };
+      }
+      reviews = await reviewCollection.find(fallbackQuery).sort({ createdAt: -1 }).limit(10).toArray();
+    }
+    const totalReviews = await reviewCollection.countDocuments({}).catch(() => 0);
+
+    let avgRating = 4.8;
+    try {
+      const ratingPipeline = [
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: '$rating' },
+          },
+        },
+      ];
+      const ratingResult = await reviewCollection.aggregate(ratingPipeline).toArray();
+      if (ratingResult.length > 0 && ratingResult[0].avgRating > 0) {
+        avgRating = Math.round(ratingResult[0].avgRating * 10) / 10;
+      }
+    } catch (e) {
+      console.warn('Error computing avg rating in review service:', e);
+    }
+
+    return {
+      reviews,
+      avgRating,
+      happyCustomers: totalReviews,
+      totalReviews,
+      count: reviews.length,
+    };
+  }
 }
+
