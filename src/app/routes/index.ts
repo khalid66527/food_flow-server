@@ -9,10 +9,26 @@ import { ContactRoutes } from '../modules/contact/contact.route';
 import { AiRoutes } from '../modules/ai/ai.route';
 import { OrderRoutes } from '../modules/order/order.route';
 import { CategoryRoutes } from '../modules/category/category.route';
+import { SettingsRoutes } from '../modules/settings/settings.route';
+import { CouponRoutes } from '../modules/coupon/coupon.route';
+import { AuthRoutes } from '../modules/auth/auth.route';
+import { ReviewRoutes } from '../modules/review/review.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/auth',
+    route: AuthRoutes,
+  },
+  {
+    path: '/settings',
+    route: SettingsRoutes,
+  },
+  {
+    path: '/coupons',
+    route: CouponRoutes,
+  },
   {
     path: '/categories',
     route: CategoryRoutes,
@@ -56,6 +72,10 @@ const moduleRoutes = [
   {
     path: '/ai',
     route: AiRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewRoutes,
   },
 ];
 

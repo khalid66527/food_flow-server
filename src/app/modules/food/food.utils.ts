@@ -186,7 +186,8 @@ export const normalizeFoodDoc = (doc: any): Record<string, any> => {
   if (!doc) return doc;
 
   const idStr = doc._id ? doc._id.toString() : doc.id || '';
-  const restaurant = doc._restaurant?.[0] || {};
+  const rawRest = doc._restaurant;
+  const restaurant = (Array.isArray(rawRest) ? rawRest[0] : rawRest) || {};
 
   const mainImg = doc.image || (Array.isArray(doc.images) && doc.images[0]) || '';
   const imagesList = Array.isArray(doc.images) && doc.images.length > 0 ? doc.images : mainImg ? [mainImg] : [];
@@ -219,6 +220,8 @@ export const normalizeFoodDoc = (doc: any): Record<string, any> => {
     restaurantIsOpen: restaurant.isOpen ?? true,
     restaurantRating: Number(restaurant.rating) || 0,
     restaurantReviewCount: Number(restaurant.totalReviews) || 0,
+    rating: Number(doc.rating) > 0 ? Number(doc.rating) : Number(restaurant.rating) || 0,
+    reviewCount: Number(doc.reviewCount) || 0,
     createdAt: doc.createdAt || '',
     updatedAt: doc.updatedAt || '',
   };

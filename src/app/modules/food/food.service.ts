@@ -1,4 +1,4 @@
-import { foodCollection } from '../../config/db';
+import { foodCollection, categoryCollection } from '../../config/db';
 import { TFoodQueryParams, IPaginationMeta } from './food.interface';
 import {
   buildFoodMongoQuery,
@@ -6,6 +6,39 @@ import {
   normalizeFoodDoc,
 } from './food.utils';
 import { calculateRestaurantDistance } from '../../utils/location.utils';
+
+/**
+ * Build flexible regex for Bangladesh location aliases (e.g., Moulvibazar vs Maulavi Bazar, Chattogram vs Chittagong)
+ */
+export const buildLocationRegex = (locName: string): RegExp => {
+  const clean = locName.trim();
+  const lower = clean.toLowerCase();
+
+  if (lower.includes('moulvi') || lower.includes('maulavi') || lower.includes('moulvibazar')) {
+    return /(moulvi|maulavi|moulavibazar|moulvibazar)/i;
+  }
+  if (lower.includes('chattogram') || lower.includes('chittagong')) {
+    return /(chattogram|chittagong)/i;
+  }
+  if (lower.includes('cumilla') || lower.includes('comilla')) {
+    return /(cumilla|comilla)/i;
+  }
+  if (lower.includes('barishal') || lower.includes('barisal')) {
+    return /(barishal|barisal)/i;
+  }
+  if (lower.includes('bogura') || lower.includes('bogra')) {
+    return /(bogura|bogra)/i;
+  }
+  if (lower.includes('jashore') || lower.includes('jessore')) {
+    return /(jashore|jessore)/i;
+  }
+  if (lower.includes("cox's bazar") || lower.includes('coxsbazar') || lower.includes('coxs bazar')) {
+    return /(cox'?s?\s*bazar)/i;
+  }
+
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+};
 
 /**
  * Get All Global Food Items across all restaurants
@@ -64,6 +97,9 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     },
   });
 
+  // Unwind restaurant object so only foods with existing active restaurants remain
+  pipeline.push({ $unwind: '$_restaurant' });
+
   // Stage 3: Filter by restaurant-level conditions (openNow, featuredOnly, city/location)
   if (openNow === true || openNow === 'true' || openNow === '1') {
     pipeline.push({
@@ -81,14 +117,61 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     });
   }
 
+  const upazilaParam = (queryParams.upazila || '').trim();
+  const districtParam = (queryParams.district || '').trim();
+  const divisionParam = (queryParams.division || '').trim();
   const activeCity = (queryParams.city || queryParams.location || '').trim();
-  if (activeCity && activeCity.toLowerCase() !== 'all') {
-    const cityRegex = new RegExp(activeCity, 'i');
+
+  if (upazilaParam && upazilaParam.toLowerCase() !== 'all') {
+    const upazilaRegex = buildLocationRegex(upazilaParam);
+    pipeline.push({
+      $match: {
+        $or: [
+          { '_restaurant.address.upazila': upazilaRegex },
+          { '_restaurant.address.area': upazilaRegex },
+          { '_restaurant.address.postalCode': upazilaRegex },
+          { '_restaurant.address.street': upazilaRegex },
+          { '_restaurant.address.fullAddress': upazilaRegex },
+        ],
+      },
+    });
+  } else if (districtParam && districtParam.toLowerCase() !== 'all') {
+    const districtRegex = buildLocationRegex(districtParam);
+    pipeline.push({
+      $match: {
+        $or: [
+          { '_restaurant.address.district': districtRegex },
+          { '_restaurant.address.state': districtRegex },
+          { '_restaurant.address.city': districtRegex },
+          { '_restaurant.address.fullAddress': districtRegex },
+          { '_restaurant.city': districtRegex },
+        ],
+      },
+    });
+  } else if (divisionParam && divisionParam.toLowerCase() !== 'all') {
+    const divisionRegex = buildLocationRegex(divisionParam);
+    pipeline.push({
+      $match: {
+        $or: [
+          { '_restaurant.address.division': divisionRegex },
+          { '_restaurant.address.city': divisionRegex },
+          { '_restaurant.address.state': divisionRegex },
+          { '_restaurant.address.fullAddress': divisionRegex },
+          { '_restaurant.city': divisionRegex },
+        ],
+      },
+    });
+  } else if (activeCity && activeCity.toLowerCase() !== 'all') {
+    const cityRegex = buildLocationRegex(activeCity);
     pipeline.push({
       $match: {
         $or: [
           { '_restaurant.address.city': cityRegex },
+          { '_restaurant.address.division': cityRegex },
+          { '_restaurant.address.district': cityRegex },
+          { '_restaurant.address.state': cityRegex },
           { '_restaurant.address.area': cityRegex },
+          { '_restaurant.address.upazila': cityRegex },
           { '_restaurant.address.fullAddress': cityRegex },
           { '_restaurant.city': cityRegex },
         ],
@@ -100,7 +183,7 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
   pipeline.push({
     $match: {
       $or: [
-        { '_restaurant.status': { $ne: 'inactive' } },
+        { '_restaurant.status': { $in: ['active', 'approved'] } },
         { '_restaurant.status': { $exists: false } },
       ],
     },
@@ -165,14 +248,42 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
 };
 
 /**
- * Get all distinct non-empty category values from the food collection
+ * Get all distinct non-empty category values from food collection & category collection
  */
 const getDistinctCategories = async (): Promise<string[]> => {
-  const categories = await foodCollection
-    .distinct('category', { category: { $exists: true, $ne: '' } });
-  return categories
-    .filter((c): c is string => typeof c === 'string' && c.trim() !== '')
-    .sort((a, b) => a.localeCompare(b));
+  const result = await foodCollection
+    .aggregate([
+      {
+        $match: {
+          category: { $exists: true, $ne: '' },
+        },
+      },
+      {
+        $group: {
+          _id: '$category',
+        },
+      },
+    ])
+    .toArray();
+
+  const foodCategories = result
+    .map((doc) => (typeof doc._id === 'string' ? doc._id.trim() : ''))
+    .filter((c) => c !== '');
+
+  let dbCategories: string[] = [];
+  try {
+    const categoriesFromDb = await categoryCollection
+      .find({ isActive: true }, { projection: { name: 1 } })
+      .toArray();
+    dbCategories = categoriesFromDb
+      .map((c) => (typeof c.name === 'string' ? c.name.trim() : ''))
+      .filter((c) => c !== '');
+  } catch (err) {
+    // ignore fallback error
+  }
+
+  const combined = Array.from(new Set([...foodCategories, ...dbCategories]));
+  return combined.sort((a, b) => a.localeCompare(b));
 };
 
 export const FoodService = {

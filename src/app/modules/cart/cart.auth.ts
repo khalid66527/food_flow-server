@@ -1,53 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { usersCollection } from '../../config/db';
-
-/**
- * Standardize a user role string into a canonical label.
- * Mirrors the logic used by the admin module.
- */
-const standardizeRole = (rawRole?: any): string => {
-  if (!rawRole || typeof rawRole !== 'string') return 'Customer';
-  const trimmed = rawRole.trim();
-  if (/^(admin|super-admin|super_admin)/i.test(trimmed)) return 'admin';
-  if (/^(restaurant|restaurant partner|restaurant_partner|vendor)/i.test(trimmed)) {
-    return 'Restaurant Partner';
-  }
-  if (/^(rider|delivery partner|delivery_partner|delivery|driver)/i.test(trimmed)) {
-    return 'Delivery Partner';
-  }
-  if (/^(customer|user|client)/i.test(trimmed)) return 'Customer';
-  return trimmed;
-};
-
-/**
- * Attach the authenticated user to the request (so callers can read req.authedUser).
- */
-export interface AuthedUser {
-  id: string;
-  email: string;
-  role: string;
-}
-
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      authedUser?: AuthedUser;
-    }
-  }
-}
+import { verifyJwtToken, standardizeRole } from '../auth/auth.utils';
 
 /**
  * Cart auth middleware.
  *
- * Resolves the caller's identity from the x-user-email / x-user-id headers
- * (the codebase convention), verifies the user exists, and enforces that only
- * accounts with the 'customer' role may access the cart. Requests from any
- * other role (admin, restaurant, rider) are rejected with 403.
- *
- * On success it sets req.authedUser.id as the authoritative userId and
- * overwrites the (spoofable) :userId URL param so a caller cannot read/write
- * another user's cart.
+ * Resolves the caller's identity from the Authorization Bearer JWT token or x-user-email / x-user-id headers,
+ * verifies the user exists, and enforces that only accounts with the 'customer' role may access the cart.
  */
 export const requireCustomer = async (
   req: Request,
@@ -55,10 +14,39 @@ export const requireCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const email = (req.headers['x-user-email'] as string) || '';
-    const userId = (req.headers['x-user-id'] as string) || '';
+    const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+    const emailHeader = (req.headers['x-user-email'] as string) || '';
+    const userIdHeader = (req.headers['x-user-id'] as string) || '';
 
-    if (!email.trim() && !userId.trim()) {
+    let token = '';
+    if (typeof authHeader === 'string') {
+      token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+    }
+
+    let user: any = null;
+    let userId = userIdHeader;
+    let email = emailHeader;
+
+    if (token) {
+      const decoded = verifyJwtToken(token);
+      if (decoded && decoded.email) {
+        userId = String(decoded.id || decoded.userId || '');
+        email = decoded.email;
+        user = {
+          _id: userId,
+          email,
+          role: decoded.role || 'Customer',
+        };
+      }
+    }
+
+    if (!user && (email.trim() || userId.trim())) {
+      user = email.trim()
+        ? await usersCollection.findOne({ email: email.trim().toLowerCase() })
+        : await usersCollection.findOne({ _id: String(userId) as any });
+    }
+
+    if (!user) {
       res.status(401).json({
         success: false,
         message: 'Authentication required. Please log in to access your cart.',
@@ -66,19 +54,7 @@ export const requireCustomer = async (
       return;
     }
 
-    const user = email
-      ? await usersCollection.findOne({ email })
-      : await usersCollection.findOne({ _id: String(userId) as any });
-
-    if (!user) {
-      res.status(401).json({
-        success: false,
-        message: 'User not found. Please log in to access your cart.',
-      });
-      return;
-    }
-
-    const role = standardizeRole((user as any).role);
+    const role = standardizeRole(user.role);
 
     if (role.toLowerCase() !== 'customer') {
       res.status(403).json({
@@ -89,8 +65,8 @@ export const requireCustomer = async (
     }
 
     req.authedUser = {
-      id: String((user as any)._id ?? userId),
-      email: (user as any).email ?? email,
+      id: String(user._id ?? userId),
+      email: user.email ?? email,
       role,
     };
 
