@@ -30,6 +30,29 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       }
     });
 
+    // Handle new order placed event from any client or server
+    socket.on('new_order_placed', (data: any) => {
+      console.log(`📢 Client relayed new_order_placed for:`, data?.orderId);
+      io?.emit('new_order_placed', data);
+      io?.emit('order:created', data);
+      if (data?.restaurantId) {
+        io?.to(`restaurant_${data.restaurantId}`).emit('new_order_placed', data);
+      }
+      if (Array.isArray(data?.items)) {
+        data.items.forEach((it: any) => {
+          if (it.restaurantId) {
+            io?.to(`restaurant_${it.restaurantId}`).emit('new_order_placed', data);
+          }
+        });
+      }
+    });
+
+    // Handle new delivery available for riders
+    socket.on('new_delivery_available', (data: any) => {
+      console.log(`🚴 Client relayed new_delivery_available for order:`, data?.orderId);
+      io?.emit('new_delivery_available', data);
+    });
+
     // Handle order status updates from clients (e.g. Rider / Restaurant)
     socket.on('order_status_updated', (data: any) => {
       const orderId = data?.orderId;
@@ -40,6 +63,7 @@ export function initSocket(httpServer: HTTPServer): SocketIOServer {
       }
       // Also broadcast globally so restaurant and rider dashboards update immediately
       io?.emit('order_status_updated', data);
+      io?.emit('order:status_updated', data);
     });
 
     // Handle rider live location broadcast
