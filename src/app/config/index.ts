@@ -10,4 +10,6 @@ export default {
   db_name: process.env.DB_NAME || 'food-delivery-platform',
   is_vercel: process.env.VERCEL === '1',
   gemini_api_key: process.env.GEMINI_API_KEY || '',
+  // Comma-separated list of allowed client origins for Socket.io (defaults to '*').
+  client_url: process.env.CLIENT_URL || '*',
 };

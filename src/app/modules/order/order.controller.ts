@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { OrderService } from './order.service';
+import { getIO } from '../../sockets/socket';
+import { emitOrderStatusUpdated, emitLocationUpdated } from '../../sockets/orderTracking.socket';
 
 export class OrderController {
   static async createOrder(req: Request, res: Response) {
@@ -93,6 +95,70 @@ export class OrderController {
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to update order.',
+      });
+    }
+  }
+
+  static async updateOrderStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const actorRole = req.authedUser?.role;
+
+      if (!status) {
+        return res.status(400).json({
+          success: false,
+          message: 'status is required.',
+        });
+      }
+
+      const updatedOrder = await OrderService.advanceOrderStatus(id, status, actorRole || '');
+
+      // Broadcast real-time status update to order tracking room
+      emitOrderStatusUpdated(getIO(), id, status);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Order status updated successfully.',
+        data: updatedOrder,
+      });
+    } catch (error: any) {
+      const isClientError = /Invalid order status|Status cannot move|Order not found/i.test(
+        error.message || ''
+      );
+      return res.status(isClientError ? 400 : 500).json({
+        success: false,
+        message: error.message || 'Failed to update order status.',
+      });
+    }
+  }
+
+  static async updateRiderLocation(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { lat, lng } = req.body;
+
+      const updatedOrder = await OrderService.updateRiderLocation(id, lat, lng);
+
+      // Broadcast real-time location update to order tracking room
+      emitLocationUpdated(
+        getIO(),
+        id,
+        lat,
+        lng,
+        updatedOrder?.riderLocation?.updatedAt || null
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Rider location updated successfully.',
+        data: updatedOrder,
+      });
+    } catch (error: any) {
+      const isClientError = /required|Order not found/i.test(error.message || '');
+      return res.status(isClientError ? 400 : 500).json({
+        success: false,
+        message: error.message || 'Failed to update rider location.',
       });
     }
   }
