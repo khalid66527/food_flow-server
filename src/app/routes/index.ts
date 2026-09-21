@@ -8,10 +8,41 @@ import { AddressRoutes } from '../modules/address/address.route';
 import { ContactRoutes } from '../modules/contact/contact.route';
 import { AiRoutes } from '../modules/ai/ai.route';
 import { OrderRoutes } from '../modules/order/order.route';
+import { CategoryRoutes } from '../modules/category/category.route';
+import { SettingsRoutes } from '../modules/settings/settings.route';
+import { CouponRoutes } from '../modules/coupon/coupon.route';
+import { AuthRoutes } from '../modules/auth/auth.route';
+import { ReviewRoutes } from '../modules/review/review.route';
+import { FavoriteRoutes } from '../modules/favorite/favorite.route';
+import { ZoneRoutes } from '../modules/zone/zone.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/zones',
+    route: ZoneRoutes,
+  },
+  {
+    path: '/auth',
+    route: AuthRoutes,
+  },
+  {
+    path: '/favorites',
+    route: FavoriteRoutes,
+  },
+  {
+    path: '/settings',
+    route: SettingsRoutes,
+  },
+  {
+    path: '/coupons',
+    route: CouponRoutes,
+  },
+  {
+    path: '/categories',
+    route: CategoryRoutes,
+  },
   {
     path: '/orders',
     route: OrderRoutes,
@@ -51,6 +82,10 @@ const moduleRoutes = [
   {
     path: '/ai',
     route: AiRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewRoutes,
   },
 ];
 

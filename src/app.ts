@@ -2,40 +2,40 @@
 const dns = require("node:dns");
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
-import express, { Application, Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import router from './app/routes';
+import express, { Application, Request, Response, NextFunction } from "express";
+import cors from "cors";
+import router from "./app/routes";
 
 const app: Application = express();
 
 // Middlewares
 app.use(
   cors({
-    origin: '*',
+    origin: true,
     credentials: true,
-  })
+  }),
 );
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Root & Health check
-app.get('/', (req: Request, res: Response) => {
+app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
-    message: 'Welcome to Food Flow Server API 🚀',
+    message: "Welcome to Food Flow Server API 🚀",
   });
 });
 
-app.get('/health', (req: Request, res: Response) => {
+app.get("/health", (req: Request, res: Response) => {
   res.status(200).json({
-    status: 'UP',
+    status: "UP",
     timestamp: new Date().toISOString(),
   });
 });
 
 // Application API Routes (/api/restaurants, /api/v1/restaurants, /api/admin, etc.)
-app.use('/api', router);
-app.use('/api/v1', router);
+app.use("/api", router);
+app.use("/api/v1", router);
 
 // 404 Not Found Handler
 app.use((req: Request, res: Response) => {
@@ -47,10 +47,10 @@ app.use((req: Request, res: Response) => {
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('Server Error:', err);
+  console.error("Server Error:", err);
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message: err.message || "Internal Server Error",
   });
 });
 
