@@ -30,6 +30,7 @@ export const categoryCollection: Collection = db.collection('category');
 export const settingsCollection: Collection = db.collection('platform_settings');
 export const couponsCollection: Collection = db.collection('coupons');
 export const successOrdersCollection: Collection = db.collection('successorders');
+export const reviewCollection: Collection = db.collection('reviews');
 
 export async function connectDB() {
   try {

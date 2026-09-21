@@ -552,6 +552,14 @@ const getFoodItemById = async (foodId: string) => {
   };
 };
 
+import {
+  parseIngredientString,
+  classifyIngredient,
+  formatDisplayQuantity,
+  GROCERY_AISLES,
+  IAisleGroup,
+} from './grocery.utils';
+
 /**
  * Get Single Restaurant Details by ID or Slug (with Menu)
  */
@@ -580,6 +588,233 @@ const getSingleRestaurant = async (idOrSlug: string) => {
   };
 };
 
+/**
+ * Get Food Items specifically for Restaurant Grocery & Inventory
+ * Strictly scoped to the given restaurant ID only (no global or other restaurant foods).
+ */
+const getRestaurantGroceryFoods = async (restaurantId: string) => {
+  if (!restaurantId || !String(restaurantId).trim()) {
+    throw new Error('Restaurant ID is required to fetch grocery foods.');
+  }
+
+  const cleanId = String(restaurantId).trim();
+  const query = ObjectId.isValid(cleanId)
+    ? { $or: [{ restaurantId: cleanId }, { restaurantId: new ObjectId(cleanId) }] }
+    : { restaurantId: cleanId };
+
+  const items = await foodCollection.find(query).sort({ name: 1 }).toArray();
+
+  return items.map((item) => {
+    let ingList: string[] = [];
+    if (Array.isArray(item.ingredients)) {
+      ingList = item.ingredients;
+    } else if (typeof item.ingredients === 'string' && item.ingredients.trim()) {
+      ingList = item.ingredients.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    return {
+      _id: item._id?.toString(),
+      id: item._id?.toString(),
+      restaurantId: item.restaurantId?.toString(),
+      name: item.name,
+      category: item.category || 'General',
+      price: item.price,
+      discountPrice: item.discountPrice,
+      image: item.image || (Array.isArray(item.images) ? item.images[0] : ''),
+      ingredients: ingList,
+      isAvailable: item.isAvailable ?? (item.status !== 'unavailable'),
+      status: item.status || 'available',
+      isVegetarian: item.isVegetarian || false,
+      createdAt: item.createdAt,
+    };
+  });
+};
+
+/**
+ * Aggregate ingredient requirements for selected dishes & portions
+ * Strictly verifies and limits to the given restaurant ID.
+ */
+const aggregateGroceryList = async (
+  restaurantId: string,
+  selectedItems: Array<{ foodId: string; portions: number }>
+) => {
+  if (!restaurantId || !String(restaurantId).trim()) {
+    throw new Error('Restaurant ID is required.');
+  }
+
+  if (!Array.isArray(selectedItems) || selectedItems.length === 0) {
+    return {
+      totalDishes: 0,
+      totalPortions: 0,
+      uniqueIngredientsCount: 0,
+      aisles: [],
+      selectedDishesSummary: [],
+    };
+  }
+
+  const cleanId = String(restaurantId).trim();
+  const foodIds = selectedItems
+    .map((s) => s.foodId)
+    .filter(Boolean)
+    .map((id) => (ObjectId.isValid(id) ? new ObjectId(id) : id));
+
+  // Strict Scoping: Query food items matching these IDs AND strictly matching this restaurantId
+  const scopedQuery: any = {
+    _id: { $in: foodIds },
+    ...(ObjectId.isValid(cleanId)
+      ? { $or: [{ restaurantId: cleanId }, { restaurantId: new ObjectId(cleanId) }] }
+      : { restaurantId: cleanId }),
+  };
+
+  const dbFoods = await foodCollection.find(scopedQuery).toArray();
+  const foodMap = new Map<string, any>();
+  dbFoods.forEach((f) => {
+    foodMap.set(f._id.toString(), f);
+  });
+
+  // Map to hold aggregated ingredients keyed by normalized `${category}:::${cleanName}:::${unit}`
+  const ingredientMap = new Map<
+    string,
+    {
+      name: string;
+      category: string;
+      quantity: number;
+      unit: string;
+      dishes: Set<string>;
+    }
+  >();
+
+  const selectedDishesSummary: Array<{
+    foodId: string;
+    name: string;
+    category: string;
+    image: string;
+    portions: number;
+    ingredientsCount: number;
+  }> = [];
+
+  let totalPortions = 0;
+
+  for (const item of selectedItems) {
+    const food = foodMap.get(item.foodId);
+    if (!food) continue; // Skip items that don't belong to this restaurant
+
+    const portions = Math.max(1, Number(item.portions) || 1);
+    totalPortions += portions;
+
+    let ingredientsList: string[] = [];
+    if (Array.isArray(food.ingredients)) {
+      ingredientsList = food.ingredients;
+    } else if (typeof food.ingredients === 'string' && food.ingredients.trim()) {
+      ingredientsList = food.ingredients.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    selectedDishesSummary.push({
+      foodId: food._id.toString(),
+      name: food.name,
+      category: food.category || 'General',
+      image: food.image || (Array.isArray(food.images) ? food.images[0] : ''),
+      portions,
+      ingredientsCount: ingredientsList.length,
+    });
+
+    for (const rawIng of ingredientsList) {
+      if (!rawIng || !String(rawIng).trim()) continue;
+
+      const parsed = parseIngredientString(rawIng);
+      const category = classifyIngredient(parsed.name);
+      const scaledQuantity = parsed.quantity * portions;
+
+      // Group key (case-insensitive name + unit + category)
+      const key = `${category}:::${parsed.name.toLowerCase()}:::${parsed.unit}`;
+
+      if (ingredientMap.has(key)) {
+        const existing = ingredientMap.get(key)!;
+        existing.quantity += scaledQuantity;
+        existing.dishes.add(food.name);
+      } else {
+        ingredientMap.set(key, {
+          name: parsed.name,
+          category,
+          quantity: scaledQuantity,
+          unit: parsed.unit,
+          dishes: new Set([food.name]),
+        });
+      }
+    }
+  }
+
+  // Group into Aisle Categories
+  const aisleMap = new Map<string, IAisleGroup>();
+  GROCERY_AISLES.forEach((aisle) => {
+    aisleMap.set(aisle.name, {
+      category: aisle.id,
+      aisleName: aisle.name,
+      icon: aisle.icon,
+      items: [],
+    });
+  });
+
+  let uniqueIngredientsCount = 0;
+
+  ingredientMap.forEach((entry) => {
+    uniqueIngredientsCount++;
+    const targetAisle = aisleMap.get(entry.category) || aisleMap.get('General Pantry Staples')!;
+
+    targetAisle.items.push({
+      id: `ing-${Math.random().toString(36).substring(2, 9)}`,
+      name: entry.name,
+      quantity: Math.round(entry.quantity * 100) / 100,
+      displayQuantity: formatDisplayQuantity(entry.quantity, entry.unit),
+      unit: entry.unit,
+      dishes: Array.from(entry.dishes),
+      isChecked: false,
+    });
+  });
+
+  // Filter out empty aisles and sort items alphabetically within each aisle
+  const activeAisles = Array.from(aisleMap.values())
+    .filter((a) => a.items.length > 0)
+    .map((a) => ({
+      ...a,
+      items: a.items.sort((x, y) => x.name.localeCompare(y.name)),
+    }));
+
+  return {
+    totalDishes: selectedDishesSummary.length,
+    totalPortions,
+    uniqueIngredientsCount,
+    aisles: activeAisles,
+    selectedDishesSummary,
+  };
+};
+
+/**
+ * Update Secret Grocery Ingredients / Raw Materials for a specific food item
+ */
+const updateFoodSecretRecipe = async (foodId: string, ingredients: string[]) => {
+  if (!foodId) throw new Error("Food ID is required to update secret recipe.");
+
+  const cleanIngredients = Array.isArray(ingredients)
+    ? ingredients.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+
+  const query: any = ObjectId.isValid(foodId) ? { _id: new ObjectId(foodId) } : { _id: foodId };
+
+  const result = await foodCollection.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        ingredients: cleanIngredients,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return result;
+};
+
 export const RestaurantService = {
   createOrUpdateRestaurant,
   getMyRestaurantProfile,
@@ -593,5 +828,9 @@ export const RestaurantService = {
   deleteFoodItem,
   getFoodItemById,
   getSingleRestaurant,
+  getRestaurantGroceryFoods,
+  aggregateGroceryList,
+  updateFoodSecretRecipe,
 };
+
 

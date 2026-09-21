@@ -12,6 +12,7 @@ import { CategoryRoutes } from '../modules/category/category.route';
 import { SettingsRoutes } from '../modules/settings/settings.route';
 import { CouponRoutes } from '../modules/coupon/coupon.route';
 import { AuthRoutes } from '../modules/auth/auth.route';
+import { ReviewRoutes } from '../modules/review/review.route';
 
 const router: Router = express.Router();
 
@@ -71,6 +72,10 @@ const moduleRoutes = [
   {
     path: '/ai',
     route: AiRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewRoutes,
   },
 ];
 

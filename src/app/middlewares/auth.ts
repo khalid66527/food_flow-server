@@ -6,7 +6,7 @@ import { TJwtPayload } from '../modules/auth/auth.interface';
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   process.env.BETTER_AUTH_SECRET ||
-  'Ermde6JRPK1BwSjUnCI4H7gBKmTdq6WU';
+  '';
 
 /**
  * Standardize user role

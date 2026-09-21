@@ -1,7 +1,7 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { TJwtPayload } from './auth.interface';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.BETTER_AUTH_SECRET || 'Ermde6JRPK1BwSjUnCI4H7gBKmTdq6WU';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.BETTER_AUTH_SECRET || '';
 const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
 
 /**
