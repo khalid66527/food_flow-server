@@ -13,6 +13,7 @@ import { SettingsRoutes } from '../modules/settings/settings.route';
 import { CouponRoutes } from '../modules/coupon/coupon.route';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { ReviewRoutes } from '../modules/review/review.route';
+import { FavoriteRoutes } from '../modules/favorite/favorite.route';
 
 const router: Router = express.Router();
 
@@ -20,6 +21,10 @@ const moduleRoutes = [
   {
     path: '/auth',
     route: AuthRoutes,
+  },
+  {
+    path: '/favorites',
+    route: FavoriteRoutes,
   },
   {
     path: '/settings',
