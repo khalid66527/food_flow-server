@@ -152,6 +152,7 @@ const getAllRestaurants = async (req: Request, res: Response): Promise<void> => 
       upazila: (req.query.upazila as string) || '',
       lat: (req.query.lat as string) || (req.query.latitude as string),
       lng: (req.query.lng as string) || (req.query.longitude as string),
+      zoneId: req.query.zoneId as string,
       page: req.query.page as string,
       limit: req.query.limit as string,
     };

@@ -14,6 +14,8 @@ import { CouponRoutes } from '../modules/coupon/coupon.route';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { ReviewRoutes } from '../modules/review/review.route';
 import { StatsRoutes } from '../modules/stats/stats.route';
+import { FavoriteRoutes } from '../modules/favorite/favorite.route';
+import { ZoneRoutes } from '../modules/zone/zone.route';
 
 const router: Router = express.Router();
 
@@ -23,8 +25,16 @@ const moduleRoutes = [
     route: StatsRoutes,
   },
   {
+    path: '/zones',
+    route: ZoneRoutes,
+  },
+  {
     path: '/auth',
     route: AuthRoutes,
+  },
+  {
+    path: '/favorites',
+    route: FavoriteRoutes,
   },
   {
     path: '/settings',
@@ -87,5 +97,3 @@ const moduleRoutes = [
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
 
 export default router;
-
-

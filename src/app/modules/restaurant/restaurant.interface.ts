@@ -11,6 +11,10 @@ export interface TRestaurantAddress {
     latitude: number;
     longitude: number;
   };
+  zoneId?: string;
+  numericZoneId?: number;
+  zoneIds?: string[];
+  numericZoneIds?: number[];
 }
 
 export interface TRestaurantPricing {
@@ -79,6 +83,20 @@ export interface TRestaurant {
   status?: 'active' | 'inactive' | 'pending' | 'closed' | string;
   isFeatured?: boolean;
   discountOffer?: string;
+  zoneId?: string;
+  numericZoneId?: number;
+  zoneIds?: string[];
+  numericZoneIds?: number[];
+  zoneMongoId?: any;
+  zoneMongoIdStr?: string;
+  zoneMongoIds?: any[];
+  zoneName?: string;
+  zoneNames?: string[];
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  deliveryRadiusKm?: number;
   tags?: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -91,6 +109,7 @@ export interface TRestaurantQueryParams {
   category?: string;
   cuisine?: string;
   restaurantId?: string;
+  zoneId?: string;
   city?: string;
   location?: string;
   division?: string;
@@ -100,6 +119,7 @@ export interface TRestaurantQueryParams {
   lng?: string | number;
   latitude?: string | number;
   longitude?: string | number;
+  maxDistanceKm?: string | number;
   sortBy?: 'relevance' | 'rating_desc' | 'delivery_time_asc' | 'delivery_fee_asc' | 'min_order_asc' | 'popular' | 'distance' | string;
   priceRange?: '$' | '$$' | '$$$' | '$$$$' | 'ALL' | string;
   minRating?: string | number;

@@ -59,6 +59,7 @@ export interface TFoodQueryParams {
   division?: string;
   district?: string;
   upazila?: string;
+  zoneId?: string;
   lat?: string | number;
   lng?: string | number;
   latitude?: string | number;

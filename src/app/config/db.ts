@@ -41,6 +41,8 @@ export const settingsCollection: Collection = db.collection('platform_settings')
 export const couponsCollection: Collection = db.collection('coupons');
 export const successOrdersCollection: Collection = db.collection('successorders');
 export const reviewCollection: Collection = db.collection('reviews');
+export const favoritesCollection: Collection = db.collection('favorites');
+export const zoneCollection: Collection = db.collection('zones');
 
 export async function connectDB() {
   try {
