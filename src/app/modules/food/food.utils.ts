@@ -222,6 +222,7 @@ export const normalizeFoodDoc = (doc: any): Record<string, any> => {
     restaurantReviewCount: Number(restaurant.totalReviews) || 0,
     rating: Number(doc.rating) > 0 ? Number(doc.rating) : Number(restaurant.rating) || 0,
     reviewCount: Number(doc.reviewCount) || 0,
+    zoneId: doc.zoneId ?? restaurant.zoneId ?? restaurant.numericZoneId ?? undefined,
     createdAt: doc.createdAt || '',
     updatedAt: doc.updatedAt || '',
   };

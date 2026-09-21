@@ -19,9 +19,9 @@ async function bootstrap() {
 
     // Start Server (avoid double listening in Vercel serverless environment)
     if (!config.is_vercel) {
-      server.listen(config.port, () => {
+      server.listen(Number(config.port), '0.0.0.0', () => {
         console.log(
-          `🚀 Food Flow Server (with Socket.IO) is running on http://localhost:${config.port}`,
+          `🚀 Food Flow Server (with Socket.IO) is running on port ${config.port} (0.0.0.0)`,
         );
       });
     }
