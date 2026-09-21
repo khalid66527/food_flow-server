@@ -16,6 +16,10 @@ const buildOrderQuery = (id: string) => {
   }
   return { $or: queryConditions };
 };
+<<<<<<< HEAD
+=======
+import { emitOrderStatusUpdate, emitNewOrder } from '../../socket';
+>>>>>>> 6cf59188008e3be30c7ee257a6178ecb0147eaed
 
 export class OrderService {
   static async createOrder(payload: any, userId: string, userEmail: string) {
@@ -154,6 +158,7 @@ export class OrderService {
       updatedAt: new Date().toISOString(),
     };
 
+<<<<<<< HEAD
     if (updates.orderStatus === 'Out for Delivery' && !order.deliveryOtp) {
       updateDoc.deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
       updateDoc.deliveryOtpCreatedAt = new Date().toISOString();
@@ -206,22 +211,11 @@ export class OrderService {
 
     return updatedOrder;
   }
+=======
+>>>>>>> 6cf59188008e3be30c7ee257a6178ecb0147eaed
 
-  /**
-   * Advance an order's status (PATCH /orders/:id/status).
-   *
-   * Enforces the status enum and role-permitted transitions:
-   *  - Restaurant Partner: pending -> preparing -> ready_for_pickup
-   *  - Delivery Partner:   ready_for_pickup -> out_for_delivery -> delivered
-   *  - admin:              any valid status
-   */
-  static async advanceOrderStatus(id: string, newStatus: string, actorRole: string) {
-    if (!ORDER_STATUS_VALUES.includes(newStatus as OrderStatus)) {
-      throw new Error(
-        `Invalid order status '${newStatus}'. Allowed: ${ORDER_STATUS_VALUES.join(', ')}`
-      );
-    }
 
+<<<<<<< HEAD
     const query = buildOrderQuery(id);
     const order = await ordersCollection.findOne(query);
     if (!order) {
@@ -296,5 +290,58 @@ export class OrderService {
     });
 
     return await ordersCollection.findOne(query);
+=======
+    if (updates.orderStatus === 'Out for Delivery' && !order.deliveryOtp) {
+      updateDoc.deliveryOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      updateDoc.deliveryOtpCreatedAt = new Date().toISOString();
+    }
+
+    if (updates.orderStatus === 'Delivered') {
+      updateDoc.deliveryStatus = 'Delivered';
+      updateDoc.deliveredAt = updateDoc.deliveredAt || new Date().toISOString();
+      updateDoc.paymentStatus = 'Paid';
+      if (updates.riderInfo) {
+        updateDoc.riderInfo = {
+          ...updates.riderInfo,
+          deliveredAt: updateDoc.deliveredAt,
+        };
+      }
+    }
+
+    await ordersCollection.updateOne({ $or: queryConditions }, { $set: updateDoc });
+    const updatedOrder = await ordersCollection.findOne({ $or: queryConditions });
+
+    if (updates.orderStatus === 'Delivered' && updatedOrder) {
+      try {
+        const successDoc = {
+          ...updatedOrder,
+          orderStatus: 'Delivered',
+          deliveryStatus: 'Delivered',
+          deliveredAt: updateDoc.deliveredAt || new Date().toISOString(),
+          paymentStatus: 'Paid',
+          storedAt: new Date().toISOString(),
+        };
+        delete (successDoc as any)._id;
+        await successOrdersCollection.updateOne(
+          { orderId: updatedOrder.orderId },
+          { $set: successDoc },
+          { upsert: true }
+        );
+      } catch (sErr) {
+        console.warn('Could not save to successOrdersCollection in server:', sErr);
+      }
+    }
+
+    // Broadcast real-time order status update to customers, riders, and restaurants
+    if (updatedOrder) {
+      try {
+        emitOrderStatusUpdate(updatedOrder.orderId, updatedOrder);
+      } catch (e) {
+        console.warn('Socket emit order update error:', e);
+      }
+    }
+
+    return updatedOrder;
+>>>>>>> 6cf59188008e3be30c7ee257a6178ecb0147eaed
   }
 }
