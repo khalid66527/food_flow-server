@@ -12,6 +12,119 @@ import {
   normalizeRestaurantDoc,
 } from './restaurant.utils';
 import { calculateRestaurantDistance } from '../../utils/location.utils';
+import { ZoneService } from '../zone/zone.service';
+import { calculateDynamicDeliveryFee } from '../../utils/geofence.utils';
+
+/**
+ * Helper to resolve coordinates and automatically detect active delivery zone
+ */
+const resolveCoordinatesAndZone = async (payload: Record<string, any>) => {
+  const lat = Number(
+    payload.coordinates?.latitude ??
+    payload.address?.coordinates?.latitude ??
+    payload.address?.latitude ??
+    payload.latitude
+  );
+  const lng = Number(
+    payload.coordinates?.longitude ??
+    payload.address?.coordinates?.longitude ??
+    payload.address?.longitude ??
+    payload.longitude
+  );
+
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    payload.coordinates = { latitude: lat, longitude: lng };
+    if (!payload.address) {
+      payload.address = {};
+    }
+    payload.address.coordinates = { latitude: lat, longitude: lng };
+    payload.address.latitude = lat;
+    payload.address.longitude = lng;
+
+    const detection = await ZoneService.detectUserZone(lat, lng);
+    if (detection.isInsideServiceArea && detection.primaryZone) {
+      const pZone = detection.primaryZone;
+      const zoneIdStr = String(pZone.zoneId !== undefined ? pZone.zoneId : pZone._id);
+      const numericZoneId = pZone.zoneId !== undefined ? Number(pZone.zoneId) : undefined;
+      const zoneMongoId = pZone._id ? (ObjectId.isValid(pZone._id) ? new ObjectId(pZone._id) : pZone._id) : undefined;
+      const zoneMongoIdStr = pZone._id ? String(pZone._id) : undefined;
+      const zoneName = pZone.name;
+
+      payload.zoneId = zoneIdStr;
+      payload.numericZoneId = numericZoneId;
+      payload.zoneMongoId = zoneMongoId;
+      payload.zoneMongoIdStr = zoneMongoIdStr;
+      payload.zoneName = zoneName;
+
+      // Multi-zone coverage: Include primary and all adjacent zones within delivery radius
+      const candidateZoneIds = Array.isArray(detection.candidateZoneIds)
+        ? detection.candidateZoneIds.map(String)
+        : [zoneIdStr];
+      const numericCandidateIds = candidateZoneIds.map(Number).filter((n) => !isNaN(n));
+      const zoneNames = (detection.candidateZones || []).map((z: any) => z.name).filter(Boolean);
+      const zoneMongoIds = (detection.candidateZones || [])
+        .map((z: any) => (z._id && ObjectId.isValid(z._id) ? new ObjectId(z._id) : z._id))
+        .filter(Boolean);
+
+      payload.zoneIds = Array.from(new Set([zoneIdStr, ...candidateZoneIds]));
+      payload.numericZoneIds = Array.from(
+        new Set(numericZoneId !== undefined ? [numericZoneId, ...numericCandidateIds] : numericCandidateIds)
+      );
+      payload.zoneNames = zoneNames.length > 0 ? zoneNames : zoneName ? [zoneName] : [];
+      payload.zoneMongoIds = zoneMongoIds;
+
+      if (payload.address) {
+        payload.address.zoneId = zoneIdStr;
+        payload.address.numericZoneId = numericZoneId;
+        payload.address.zoneIds = payload.zoneIds;
+        payload.address.numericZoneIds = payload.numericZoneIds;
+      }
+    }
+  }
+};
+
+/**
+ * Synchronize all food items of a restaurant with its assigned zone
+ */
+const syncFoodItemsZone = async (restaurantId: any, zoneData: Record<string, any>) => {
+  if (!restaurantId || !zoneData.zoneId) return;
+  const restIdObj = ObjectId.isValid(restaurantId) ? new ObjectId(restaurantId) : null;
+  const restIdStr = restaurantId.toString();
+  const restQuery = restIdObj
+    ? { $or: [{ restaurantId: restIdStr }, { restaurantId: restIdObj }] }
+    : { restaurantId: restIdStr };
+
+  const numZoneId =
+    zoneData.numericZoneId !== undefined
+      ? Number(zoneData.numericZoneId)
+      : zoneData.zoneId && !isNaN(Number(zoneData.zoneId))
+      ? Number(zoneData.zoneId)
+      : undefined;
+
+  const rawZoneIds =
+    Array.isArray(zoneData.zoneIds) && zoneData.zoneIds.length > 0
+      ? zoneData.zoneIds.map(String)
+      : [String(zoneData.zoneId)];
+
+  const numZoneIds =
+    Array.isArray(zoneData.numericZoneIds) && zoneData.numericZoneIds.length > 0
+      ? zoneData.numericZoneIds.map(Number).filter((n: number) => !isNaN(n))
+      : numZoneId !== undefined
+      ? [numZoneId]
+      : [];
+
+  await foodCollection.updateMany(restQuery, {
+    $set: {
+      zoneId: String(zoneData.zoneId),
+      numericZoneId: numZoneId,
+      zoneIds: rawZoneIds,
+      numericZoneIds: numZoneIds,
+      zoneMongoId: zoneData.zoneMongoId,
+      zoneMongoIdStr: zoneData.zoneMongoIdStr || (zoneData.zoneMongoId ? String(zoneData.zoneMongoId) : undefined),
+      zoneName: zoneData.zoneName,
+    },
+  });
+};
 
 /**
  * Create or Update Restaurant Profile
@@ -35,11 +148,15 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
 
     if (existing) {
       const { _id, ...restPayload } = payload;
+      await resolveCoordinatesAndZone(restPayload);
       const updateResult = await restaurantCollection.findOneAndUpdate(
         { _id: existing._id },
         { $set: { ...restPayload, contactEmail, updatedAt: new Date().toISOString() } },
         { returnDocument: 'after' }
       );
+      if (updateResult) {
+        await syncFoodItemsZone(existing._id, updateResult);
+      }
       return { isUpdated: true, data: normalizeRestaurantDoc(updateResult) };
     }
   }
@@ -50,6 +167,8 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
       : Array.isArray(payload.cuisineTypes) && payload.cuisineTypes.length > 0
       ? payload.cuisineTypes
       : [];
+
+  await resolveCoordinatesAndZone(payload);
 
   const restaurantDoc: Record<string, any> = {
     ...payload,
@@ -71,11 +190,11 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
     website: payload.website || '',
     address: payload.address || {
       street: '',
-      city: 'Manhattan',
-      area: 'Downtown',
-      state: 'NY',
+      city: 'Dhaka',
+      area: 'Banani',
+      state: 'Dhaka',
       postalCode: '',
-      country: 'USA',
+      country: 'Bangladesh',
     },
     openingHours: payload.openingHours,
     generalOpenTime: payload.generalOpenTime || '09:00 AM',
@@ -117,6 +236,17 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
     status: payload.status || 'pending',
     isFeatured: payload.isFeatured ?? false,
     discountOffer: payload.discountOffer || '',
+    zoneId: payload.zoneId || '',
+    numericZoneId: payload.numericZoneId,
+    zoneIds: payload.zoneIds || (payload.zoneId ? [String(payload.zoneId)] : []),
+    numericZoneIds: payload.numericZoneIds || (payload.numericZoneId ? [payload.numericZoneId] : []),
+    zoneMongoId: payload.zoneMongoId,
+    zoneMongoIdStr: payload.zoneMongoIdStr,
+    zoneMongoIds: payload.zoneMongoIds,
+    zoneName: payload.zoneName || '',
+    zoneNames: payload.zoneNames,
+    deliveryRadiusKm: Number(payload.deliveryRadiusKm) || 5.0,
+    coordinates: payload.coordinates,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -125,6 +255,9 @@ const createOrUpdateRestaurant = async (payload: Partial<TRestaurant>) => {
 
   const result = await restaurantCollection.insertOne(restaurantDoc);
   const createdDoc = { _id: result.insertedId, ...restaurantDoc };
+  if (createdDoc._id) {
+    await syncFoodItemsZone(createdDoc._id, createdDoc);
+  }
 
   return { isUpdated: false, data: normalizeRestaurantDoc(createdDoc) };
 };
@@ -182,6 +315,7 @@ const updateMyRestaurantProfile = async (
   }
 
   const { _id, status, ...restPayload } = payload;
+  await resolveCoordinatesAndZone(restPayload);
   const updateData = { ...restPayload, updatedAt: new Date().toISOString() };
 
   const result = await restaurantCollection.findOneAndUpdate(
@@ -189,6 +323,10 @@ const updateMyRestaurantProfile = async (
     { $set: updateData },
     { returnDocument: 'after' }
   );
+
+  if (result) {
+    await syncFoodItemsZone(result._id, result);
+  }
 
   return result ? normalizeRestaurantDoc(result) : null;
 };
@@ -228,16 +366,103 @@ const toggleRestaurantStatus = async (ownerEmail: string | undefined, isOpen: bo
  * Get All Restaurants for Explore Page (Search, Category, Filter, Sort, Pagination)
  */
 const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
-  const { page = 1, limit = 9, sortBy, lat, lng, latitude, longitude } = queryParams;
-
-  const mongoQuery = buildRestaurantMongoQuery(queryParams);
-  const sortOptions = buildRestaurantSortOptions(sortBy as string);
+  const { page = 1, limit = 9, sortBy, lat, lng, latitude, longitude, maxDistanceKm } = queryParams;
 
   const userLat = lat || latitude ? parseFloat(String(lat || latitude)) : undefined;
   const userLng = lng || longitude ? parseFloat(String(lng || longitude)) : undefined;
 
+  let effectiveQueryParams = { ...queryParams };
+  let baseDeliveryFee = 30;
+  let perKmDeliveryFee = 10;
+  let effectiveMaxDistanceKm = maxDistanceKm ? Number(maxDistanceKm) : undefined;
+
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
   const limitNum = Math.max(1, parseInt(String(limit), 10) || 9);
+
+  if (queryParams.zoneId === 'none') {
+    return {
+      data: [],
+      pagination: {
+        currentPage: 1,
+        totalPages: 0,
+        totalItems: 0,
+        itemsPerPage: limitNum,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+      meta: {
+        page: 1,
+        limit: limitNum,
+        total: 0,
+        totalPage: 0,
+      },
+      message: 'Delivery not available in this area',
+    };
+  }
+
+  // Geofencing: Detect Delivery Zone from GPS Coordinates (lat/lng)
+  if (userLat !== undefined && userLng !== undefined) {
+    try {
+      const detection = await ZoneService.detectUserZone(userLat, userLng);
+      if (detection.isInsideServiceArea && detection.candidateZoneIds && detection.candidateZoneIds.length > 0) {
+        const existingZoneIds =
+          queryParams.zoneId && queryParams.zoneId !== 'all'
+            ? queryParams.zoneId.split(',').map((z) => z.trim()).filter(Boolean)
+            : [];
+        const mergedZoneIds = Array.from(new Set([...existingZoneIds, ...detection.candidateZoneIds]));
+        effectiveQueryParams.zoneId = mergedZoneIds.join(',');
+        if (!effectiveMaxDistanceKm && detection.maxDeliveryRadiusKm) {
+          effectiveMaxDistanceKm = detection.maxDeliveryRadiusKm;
+        }
+        if (detection.baseDeliveryFee) baseDeliveryFee = detection.baseDeliveryFee;
+        if (detection.perKmDeliveryFee) perKmDeliveryFee = detection.perKmDeliveryFee;
+      } else if (!queryParams.zoneId) {
+        // Strict Geofence: Outside all delivery zones => Return 0 restaurants!
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: limitNum,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+          meta: {
+            page: 1,
+            limit: limitNum,
+            total: 0,
+            totalPage: 0,
+          },
+          message: detection.message || 'Delivery not available in your area',
+        };
+      }
+    } catch {
+      if (!queryParams.zoneId) {
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: limitNum,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+          meta: {
+            page: 1,
+            limit: limitNum,
+            total: 0,
+            totalPage: 0,
+          },
+          message: 'Delivery not available in your area',
+        };
+      }
+    }
+  }
+
+  const mongoQuery = buildRestaurantMongoQuery(effectiveQueryParams);
+  const sortOptions = buildRestaurantSortOptions(sortBy as string);
 
   // If user provided valid GPS coordinates or asked for distance sorting, fetch matching items and sort by proximity
   const isDistanceSortRequested = sortBy === 'distance' || (userLat !== undefined && userLng !== undefined && !sortBy);
@@ -245,23 +470,42 @@ const getAllRestaurants = async (queryParams: TRestaurantQueryParams) => {
   if (isDistanceSortRequested || (userLat !== undefined && userLng !== undefined)) {
     const rawItems = await restaurantCollection.find(mongoQuery).toArray();
 
-    // Attach distance and sort by proximity (closest first)
-    let sortedItems = rawItems.map((doc) => {
+    // Step 1: Attach exact distance & calculate dynamic delivery fee
+    let processedItems = rawItems.map((doc) => {
       const dist = calculateRestaurantDistance(doc, userLat, userLng);
+      const dynamicFee = calculateDynamicDeliveryFee(
+        dist.distanceKm,
+        Number(doc.pricing?.deliveryFee || doc.deliveryFee || baseDeliveryFee),
+        perKmDeliveryFee
+      );
+
       return {
         ...doc,
         distanceKm: dist.distanceKm,
         distanceText: dist.distanceText,
+        deliveryFee: dynamicFee,
+        pricing: {
+          ...doc.pricing,
+          deliveryFee: dynamicFee,
+        },
       };
     });
 
+    // Step 2: Hybrid Distance Pruning (Filter out restaurants beyond reachable delivery radius)
+    const thresholdRadiusKm = effectiveMaxDistanceKm && effectiveMaxDistanceKm > 0 ? effectiveMaxDistanceKm : 4.5;
+    processedItems = processedItems.filter((item: any) => {
+      const restMaxRadius = Number(item.deliveryRadiusKm) || thresholdRadiusKm;
+      const allowedRadius = Math.max(restMaxRadius, thresholdRadiusKm);
+      return item.distanceKm <= allowedRadius;
+    });
+
     if (isDistanceSortRequested || sortBy === 'distance') {
-      sortedItems.sort((a, b) => a.distanceKm - b.distanceKm);
+      processedItems.sort((a, b) => a.distanceKm - b.distanceKm);
     }
 
-    const totalItems = sortedItems.length;
+    const totalItems = processedItems.length;
     const skip = (pageNum - 1) * limitNum;
-    const paginatedItems = sortedItems.slice(skip, skip + limitNum);
+    const paginatedItems = processedItems.slice(skip, skip + limitNum);
 
     const normalizedData = paginatedItems.map((doc) => normalizeRestaurantDoc(doc));
     const totalPages = Math.ceil(totalItems / limitNum) || 0;

@@ -14,10 +14,15 @@ import { CouponRoutes } from '../modules/coupon/coupon.route';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { ReviewRoutes } from '../modules/review/review.route';
 import { FavoriteRoutes } from '../modules/favorite/favorite.route';
+import { ZoneRoutes } from '../modules/zone/zone.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/zones',
+    route: ZoneRoutes,
+  },
   {
     path: '/auth',
     route: AuthRoutes,
