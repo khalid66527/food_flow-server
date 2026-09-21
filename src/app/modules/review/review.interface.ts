@@ -14,6 +14,7 @@ export interface IReview {
   targetName?: string;
   rating: number; // 1 to 5
   comment: string;
+  isFeatured?: boolean;
   createdAt: string;
   updatedAt?: string;
 }

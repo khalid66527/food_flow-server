@@ -6,6 +6,10 @@ const router: Router = express.Router();
 router.post('/batch', ReviewController.createBatchReviews);
 router.post('/', ReviewController.createBatchReviews);
 
+router.get('/testimonials', ReviewController.getFeaturedTestimonials);
+router.patch('/feature/:id', ReviewController.toggleReviewFeatured);
+router.patch('/admin/feature/:id', ReviewController.toggleReviewFeatured);
+
 router.get('/admin/all', ReviewController.getAllReviewsForAdmin);
 router.get('/rider/:riderId', ReviewController.getRiderReviews);
 router.get('/restaurant/:restaurantId', ReviewController.getRestaurantReviews);
