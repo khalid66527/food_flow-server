@@ -13,10 +13,15 @@ import { SettingsRoutes } from '../modules/settings/settings.route';
 import { CouponRoutes } from '../modules/coupon/coupon.route';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { ReviewRoutes } from '../modules/review/review.route';
+import { StatsRoutes } from '../modules/stats/stats.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/stats',
+    route: StatsRoutes,
+  },
   {
     path: '/auth',
     route: AuthRoutes,

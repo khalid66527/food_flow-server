@@ -1,5 +1,15 @@
 import { MongoClient, ServerApiVersion, Db, Collection } from 'mongodb';
+import dns from 'node:dns';
 import config from './index';
+
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+  if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (e) {
+  // Ignore
+}
 
 if (!config.mongodb_uri) {
   console.error('❌ MONGODB_URI is not defined in .env file.');
