@@ -109,6 +109,37 @@ export const buildRestaurantMongoQuery = (
     }
   }
 
+  // Zone ID Filter (Single or Multiple Candidate Zones for Hybrid Geofencing)
+  const { zoneId } = queryParams;
+  if (zoneId && zoneId !== 'all') {
+    const rawZoneIds = zoneId.split(',').map((z) => z.trim()).filter(Boolean);
+    const numericIds = rawZoneIds.map(Number).filter((n) => !isNaN(n));
+    const allMatches: (string | number)[] = [...rawZoneIds, ...numericIds];
+
+    const validObjectIds = rawZoneIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+
+    queryFilters.push({
+      $or: [
+        { zoneId: { $in: allMatches } },
+        { numericZoneId: { $in: allMatches } },
+        { zoneIds: { $in: allMatches } },
+        { numericZoneIds: { $in: allMatches } },
+        { 'address.zoneId': { $in: allMatches } },
+        { 'address.numericZoneId': { $in: allMatches } },
+        { 'address.zoneIds': { $in: allMatches } },
+        { 'address.numericZoneIds': { $in: allMatches } },
+        { zoneMongoIdStr: { $in: rawZoneIds } },
+        ...(validObjectIds.length > 0
+          ? [
+              { zoneMongoId: { $in: validObjectIds } },
+              { zoneId: { $in: validObjectIds } },
+              { zoneMongoIds: { $in: validObjectIds } },
+            ]
+          : []),
+      ],
+    });
+  }
+
   // Hierarchical Location / Upazila / District / Division / City filter
   const { upazila, district, division } = queryParams;
   const activeLocation = (location || city || '').trim();
@@ -320,11 +351,25 @@ export const normalizeRestaurantDoc = (doc: any): TRestaurant => {
     isOpen: doc.isOpen ?? true,
     isFeatured: doc.isFeatured ?? false,
     discountOffer: doc.discountOffer || '',
-    address: doc.address || {
-      street: '',
-      city: 'Manhattan',
-      area: 'Downtown',
-      state: 'NY',
+    zoneId: doc.zoneId || doc.address?.zoneId || '',
+    numericZoneId: doc.numericZoneId !== undefined ? Number(doc.numericZoneId) : (doc.zoneId && !isNaN(Number(doc.zoneId)) ? Number(doc.zoneId) : undefined),
+    zoneMongoId: doc.zoneMongoId ? String(doc.zoneMongoId) : undefined,
+    zoneName: doc.zoneName || '',
+    coordinates: doc.coordinates || doc.address?.coordinates || (Number.isFinite(doc.latitude) && Number.isFinite(doc.longitude) ? { latitude: Number(doc.latitude), longitude: Number(doc.longitude) } : undefined),
+    deliveryRadiusKm: Number(doc.deliveryRadiusKm) || 5.0,
+    address: {
+      street: doc.address?.street || '',
+      city: doc.address?.city || 'Dhaka',
+      area: doc.address?.area || '',
+      state: doc.address?.state || '',
+      postalCode: doc.address?.postalCode || '',
+      country: doc.address?.country || 'Bangladesh',
+      latitude: doc.address?.latitude || doc.coordinates?.latitude,
+      longitude: doc.address?.longitude || doc.coordinates?.longitude,
+      coordinates: doc.address?.coordinates || doc.coordinates,
+      zoneId: doc.address?.zoneId || doc.zoneId || '',
+      fullAddress: doc.address?.fullAddress || '',
+      ...doc.address,
     },
   };
 };

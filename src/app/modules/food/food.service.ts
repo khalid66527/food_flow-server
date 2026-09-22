@@ -1,4 +1,5 @@
-import { foodCollection } from '../../config/db';
+import { ObjectId } from 'mongodb';
+import { foodCollection, categoryCollection, zoneCollection } from '../../config/db';
 import { TFoodQueryParams, IPaginationMeta } from './food.interface';
 import {
   buildFoodMongoQuery,
@@ -6,6 +7,7 @@ import {
   normalizeFoodDoc,
 } from './food.utils';
 import { calculateRestaurantDistance } from '../../utils/location.utils';
+import { ZoneService } from '../zone/zone.service';
 
 /**
  * Build flexible regex for Bangladesh location aliases (e.g., Moulvibazar vs Maulavi Bazar, Chattogram vs Chittagong)
@@ -57,6 +59,87 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
   const limitNum = Math.max(1, parseInt(String(limit), 10) || 12);
   const skip = (pageNum - 1) * limitNum;
 
+  if (queryParams.zoneId === 'none') {
+    return {
+      data: [],
+      pagination: {
+        currentPage: 1,
+        totalPages: 0,
+        totalItems: 0,
+        itemsPerPage: limitNum,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+      meta: {
+        page: 1,
+        limit: limitNum,
+        total: 0,
+        totalPage: 0,
+      },
+    };
+  }
+
+  let effectiveMaxDistanceKm = (queryParams as any).maxDistanceKm
+    ? Number((queryParams as any).maxDistanceKm)
+    : undefined;
+
+  // Geofencing: Detect Delivery Zone from GPS Coordinates (lat/lng)
+  if (userLat !== undefined && userLng !== undefined) {
+    try {
+      const detection = await ZoneService.detectUserZone(userLat, userLng);
+      if (detection.isInsideServiceArea && detection.candidateZoneIds && detection.candidateZoneIds.length > 0) {
+        const existingZoneIds =
+          queryParams.zoneId && queryParams.zoneId !== 'all'
+            ? String(queryParams.zoneId).split(',').map((z: string) => z.trim()).filter(Boolean)
+            : [];
+        const mergedZoneIds = Array.from(new Set([...existingZoneIds, ...detection.candidateZoneIds]));
+        queryParams.zoneId = mergedZoneIds.join(',');
+        if (!effectiveMaxDistanceKm && detection.maxDeliveryRadiusKm) {
+          effectiveMaxDistanceKm = detection.maxDeliveryRadiusKm;
+        }
+      } else if (!queryParams.zoneId) {
+        // Outside all delivery zones => Return 0 foods!
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: limitNum,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+          meta: {
+            page: 1,
+            limit: limitNum,
+            total: 0,
+            totalPage: 0,
+          },
+        };
+      }
+    } catch {
+      if (!queryParams.zoneId) {
+        return {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: limitNum,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+          meta: {
+            page: 1,
+            limit: limitNum,
+            total: 0,
+            totalPage: 0,
+          },
+        };
+      }
+    }
+  }
+
   // Build the aggregation pipeline
   const pipeline: any[] = [];
 
@@ -89,7 +172,17 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
             rating: { $ifNull: ['$rating', 0] },
             totalReviews: { $ifNull: ['$totalReviews', 0] },
             address: 1,
+            coordinates: 1,
+            deliveryRadiusKm: 1,
             city: 1,
+            zoneId: 1,
+            numericZoneId: 1,
+            zoneIds: 1,
+            numericZoneIds: 1,
+            zoneMongoId: 1,
+            zoneMongoIdStr: 1,
+            zoneMongoIds: 1,
+            zoneNames: 1,
           },
         },
       ],
@@ -179,6 +272,45 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
     });
   }
 
+  // Stage 3.5: Strict Zone ID filter (matching restaurant geofenced delivery zones)
+  if (queryParams.zoneId && queryParams.zoneId !== 'all') {
+    const rawZoneIds = String(queryParams.zoneId).split(',').map((z: string) => z.trim()).filter(Boolean);
+    if (rawZoneIds.length > 0) {
+      const numericIds = rawZoneIds.map(Number).filter(n => !isNaN(n));
+      const allMatches: (string | number)[] = [...rawZoneIds, ...numericIds];
+      const validObjectIds = rawZoneIds.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+
+      pipeline.push({
+        $match: {
+          $or: [
+            { zoneId: { $in: allMatches } },
+            { numericZoneId: { $in: allMatches } },
+            { zoneIds: { $in: allMatches } },
+            { numericZoneIds: { $in: allMatches } },
+            { zoneMongoIdStr: { $in: rawZoneIds } },
+            { '_restaurant.zoneId': { $in: allMatches } },
+            { '_restaurant.numericZoneId': { $in: allMatches } },
+            { '_restaurant.zoneIds': { $in: allMatches } },
+            { '_restaurant.numericZoneIds': { $in: allMatches } },
+            { '_restaurant.address.zoneId': { $in: allMatches } },
+            { '_restaurant.address.numericZoneId': { $in: allMatches } },
+            { '_restaurant.address.zoneIds': { $in: allMatches } },
+            { '_restaurant.address.numericZoneIds': { $in: allMatches } },
+            { '_restaurant.zoneMongoIdStr': { $in: rawZoneIds } },
+            ...(validObjectIds.length > 0
+              ? [
+                  { zoneMongoId: { $in: validObjectIds } },
+                  { zoneMongoIds: { $in: validObjectIds } },
+                  { '_restaurant.zoneMongoId': { $in: validObjectIds } },
+                  { '_restaurant.zoneMongoIds': { $in: validObjectIds } },
+                ]
+              : []),
+          ],
+        },
+      });
+    }
+  }
+
   // Stage 4: Filter out food from inactive restaurants
   pipeline.push({
     $match: {
@@ -192,38 +324,76 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
   // Stage 5: Sort
   pipeline.push({ $sort: sortOptions });
 
-  // Stage 6: Facet for single-query count and pagination data
-  pipeline.push({
-    $facet: {
-      metadata: [{ $count: 'total' }],
-      data: [
-        { $skip: skip },
-        { $limit: limitNum },
-        {
-          $addFields: {
-            restaurantId: { $toString: '$restaurantId' },
+  const isGpsProvided = userLat !== undefined && userLng !== undefined;
+  const thresholdRadiusKm = effectiveMaxDistanceKm && effectiveMaxDistanceKm > 0 ? effectiveMaxDistanceKm : 4.5;
+
+  let normalizedData: any[] = [];
+  let totalItems = 0;
+
+  if (isGpsProvided) {
+    // When user coordinates are available, run pipeline without facet limit to allow
+    // in-memory hybrid distance pruning (removing dishes outside reachable delivery radius)
+    const rawItems = await foodCollection.aggregate(pipeline).toArray();
+
+    const processedAndPruned = rawItems
+      .map((doc: any) => {
+        const restObj = Array.isArray(doc._restaurant) ? doc._restaurant[0] : doc._restaurant;
+        const dist = calculateRestaurantDistance(restObj || doc, userLat, userLng);
+        const norm = normalizeFoodDoc(doc);
+        return {
+          ...norm,
+          restaurantDeliveryRadiusKm: restObj?.deliveryRadiusKm,
+          distanceKm: dist.distanceKm,
+          distanceText: dist.distanceText,
+        };
+      })
+      .filter((item: any) => {
+        const restMaxRadius = Number(item.restaurantDeliveryRadiusKm) || thresholdRadiusKm;
+        const allowedRadius = Math.max(restMaxRadius, thresholdRadiusKm);
+        return item.distanceKm <= allowedRadius;
+      });
+
+    if (sortBy === 'distance' || !sortBy) {
+      processedAndPruned.sort((a: any, b: any) => a.distanceKm - b.distanceKm);
+    }
+
+    totalItems = processedAndPruned.length;
+    const paginatedItems = processedAndPruned.slice(skip, skip + limitNum);
+    normalizedData = paginatedItems;
+  } else {
+    // Stage 6: Facet for single-query count and pagination data when no GPS coordinates
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [
+          { $skip: skip },
+          { $limit: limitNum },
+          {
+            $addFields: {
+              restaurantId: { $toString: '$restaurantId' },
+            },
           },
-        },
-      ],
-    },
-  });
+        ],
+      },
+    });
 
-  // Execute single aggregation query
-  const aggregationResult = await foodCollection.aggregate(pipeline).toArray();
-  const facetResult = aggregationResult[0] || { metadata: [], data: [] };
-  const totalItems = facetResult.metadata[0]?.total || 0;
-  const rawItems = facetResult.data || [];
+    const aggregationResult = await foodCollection.aggregate(pipeline).toArray();
+    const facetResult = aggregationResult[0] || { metadata: [], data: [] };
+    totalItems = facetResult.metadata[0]?.total || 0;
+    const rawItems = facetResult.data || [];
 
-  const normalizedData = rawItems.map((doc: any) => {
-    const restObj = Array.isArray(doc._restaurant) ? doc._restaurant[0] : doc._restaurant;
-    const dist = calculateRestaurantDistance(restObj || doc, userLat, userLng);
-    const norm = normalizeFoodDoc(doc);
-    return {
-      ...norm,
-      distanceKm: dist.distanceKm,
-      distanceText: dist.distanceText,
-    };
-  });
+    normalizedData = rawItems.map((doc: any) => {
+      const restObj = Array.isArray(doc._restaurant) ? doc._restaurant[0] : doc._restaurant;
+      const dist = calculateRestaurantDistance(restObj || doc, userLat, userLng);
+      const norm = normalizeFoodDoc(doc);
+      return {
+        ...norm,
+        distanceKm: dist.distanceKm,
+        distanceText: dist.distanceText,
+      };
+    });
+  }
+
   const totalPages = Math.ceil(totalItems / limitNum) || 0;
 
   const pagination: IPaginationMeta = {
@@ -248,14 +418,42 @@ const getAllGlobalFoodItems = async (queryParams: TFoodQueryParams) => {
 };
 
 /**
- * Get all distinct non-empty category values from the food collection
+ * Get all distinct non-empty category values from food collection & category collection
  */
 const getDistinctCategories = async (): Promise<string[]> => {
-  const categories = await foodCollection
-    .distinct('category', { category: { $exists: true, $ne: '' } });
-  return categories
-    .filter((c): c is string => typeof c === 'string' && c.trim() !== '')
-    .sort((a, b) => a.localeCompare(b));
+  const result = await foodCollection
+    .aggregate([
+      {
+        $match: {
+          category: { $exists: true, $ne: '' },
+        },
+      },
+      {
+        $group: {
+          _id: '$category',
+        },
+      },
+    ])
+    .toArray();
+
+  const foodCategories = result
+    .map((doc) => (typeof doc._id === 'string' ? doc._id.trim() : ''))
+    .filter((c) => c !== '');
+
+  let dbCategories: string[] = [];
+  try {
+    const categoriesFromDb = await categoryCollection
+      .find({ isActive: true }, { projection: { name: 1 } })
+      .toArray();
+    dbCategories = categoriesFromDb
+      .map((c) => (typeof c.name === 'string' ? c.name.trim() : ''))
+      .filter((c) => c !== '');
+  } catch (err) {
+    // ignore fallback error
+  }
+
+  const combined = Array.from(new Set([...foodCategories, ...dbCategories]));
+  return combined.sort((a, b) => a.localeCompare(b));
 };
 
 export const FoodService = {

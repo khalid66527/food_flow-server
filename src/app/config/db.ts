@@ -1,5 +1,15 @@
 import { MongoClient, ServerApiVersion, Db, Collection } from 'mongodb';
+import dns from 'node:dns';
 import config from './index';
+
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+  if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (e) {
+  // Ignore
+}
 
 if (!config.mongodb_uri) {
   console.error('❌ MONGODB_URI is not defined in .env file.');
@@ -30,6 +40,9 @@ export const categoryCollection: Collection = db.collection('category');
 export const settingsCollection: Collection = db.collection('platform_settings');
 export const couponsCollection: Collection = db.collection('coupons');
 export const successOrdersCollection: Collection = db.collection('successorders');
+export const reviewCollection: Collection = db.collection('reviews');
+export const favoritesCollection: Collection = db.collection('favorites');
+export const zoneCollection: Collection = db.collection('zones');
 
 export async function connectDB() {
   try {

@@ -11,10 +11,31 @@ import { OrderRoutes } from '../modules/order/order.route';
 import { CategoryRoutes } from '../modules/category/category.route';
 import { SettingsRoutes } from '../modules/settings/settings.route';
 import { CouponRoutes } from '../modules/coupon/coupon.route';
+import { AuthRoutes } from '../modules/auth/auth.route';
+import { ReviewRoutes } from '../modules/review/review.route';
+import { StatsRoutes } from '../modules/stats/stats.route';
+import { FavoriteRoutes } from '../modules/favorite/favorite.route';
+import { ZoneRoutes } from '../modules/zone/zone.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/stats',
+    route: StatsRoutes,
+  },
+  {
+    path: '/zones',
+    route: ZoneRoutes,
+  },
+  {
+    path: '/auth',
+    route: AuthRoutes,
+  },
+  {
+    path: '/favorites',
+    route: FavoriteRoutes,
+  },
   {
     path: '/settings',
     route: SettingsRoutes,
@@ -67,10 +88,12 @@ const moduleRoutes = [
     path: '/ai',
     route: AiRoutes,
   },
+  {
+    path: '/reviews',
+    route: ReviewRoutes,
+  },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
 
 export default router;
-
-

@@ -1,5 +1,21 @@
 import { ordersCollection, cartCollection, successOrdersCollection, settingsCollection, couponsCollection } from '../../config/db';
 import { ObjectId } from 'mongodb';
+import {
+  ORDER_STATUS,
+  ORDER_STATUS_VALUES,
+  RESTAURANT_STATUS_TRANSITIONS,
+  RIDER_STATUS_TRANSITIONS,
+  OrderStatus,
+} from './order.constant';
+import { emitOrderStatusUpdate, emitNewOrder } from '../../socket';
+
+const buildOrderQuery = (id: string) => {
+  const queryConditions: any[] = [{ orderId: id }, { stripeSessionId: id }];
+  if (ObjectId.isValid(id)) {
+    queryConditions.push({ _id: new ObjectId(id) });
+  }
+  return { $or: queryConditions };
+};
 
 export class OrderService {
   static async createOrder(payload: any, userId: string, userEmail: string) {
@@ -71,7 +87,10 @@ export class OrderService {
       taxFundVat,
       paymentMethod: payload.paymentMethod,
       paymentStatus: 'Pending',
+      // Legacy shorthand kept for backward compatibility
       orderStatus: 'Placed',
+      status: ORDER_STATUS.PENDING,
+      riderLocation: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -84,21 +103,24 @@ export class OrderService {
       await cartCollection.deleteOne({ userId });
     }
 
+    const createdOrder = { ...orderDoc, _id: mongoId };
+
+    // Emit real-time new order event to restaurants and admins
+    try {
+      emitNewOrder(createdOrder);
+    } catch (e) {
+      console.warn('Socket emit new order error:', e);
+    }
+
     return {
       orderId,
       mongoId,
-      order: { ...orderDoc, _id: mongoId },
+      order: createdOrder,
     };
   }
 
   static async getOrderById(id: string) {
-    const queryConditions: any[] = [{ orderId: id }, { stripeSessionId: id }];
-    if (ObjectId.isValid(id)) {
-      queryConditions.push({ _id: new ObjectId(id) });
-    }
-
-    const order = await ordersCollection.findOne({ $or: queryConditions });
-    return order;
+    return await ordersCollection.findOne(buildOrderQuery(id));
   }
 
   static async getUserOrders(userId: string) {
@@ -109,13 +131,14 @@ export class OrderService {
     return orders;
   }
 
+  /**
+   * Existing generic update (PATCH /orders/:id). Kept as-is for backward
+   * compatibility with the current API logic.
+   */
   static async updateOrderStatus(id: string, updates: any) {
-    const queryConditions: any[] = [{ orderId: id }];
-    if (ObjectId.isValid(id)) {
-      queryConditions.push({ _id: new ObjectId(id) });
-    }
+    const query = buildOrderQuery(id);
 
-    const order = await ordersCollection.findOne({ $or: queryConditions });
+    const order = await ordersCollection.findOne(query);
     if (!order) return null;
 
     // Handle OTP verification when marking as Delivered
@@ -148,8 +171,8 @@ export class OrderService {
       }
     }
 
-    await ordersCollection.updateOne({ $or: queryConditions }, { $set: updateDoc });
-    const updatedOrder = await ordersCollection.findOne({ $or: queryConditions });
+    await ordersCollection.updateOne(query, { $set: updateDoc });
+    const updatedOrder = await ordersCollection.findOne(query);
 
     if (updates.orderStatus === 'Delivered' && updatedOrder) {
       try {
@@ -172,6 +195,106 @@ export class OrderService {
       }
     }
 
+    // Broadcast real-time order status update to customers, riders, and restaurants
+    if (updatedOrder) {
+      try {
+        emitOrderStatusUpdate(updatedOrder.orderId, updatedOrder);
+      } catch (e) {
+        console.warn('Socket emit order update error:', e);
+      }
+    }
+
     return updatedOrder;
+  }
+
+  /**
+   * Advance an order's status (PATCH /orders/:id/status).
+   *
+   * Enforces the status enum and role-permitted transitions:
+   *  - Restaurant Partner: pending -> preparing -> ready_for_pickup
+   *  - Delivery Partner:   ready_for_pickup -> out_for_delivery -> delivered
+   *  - admin:              any valid status
+   */
+  static async advanceOrderStatus(id: string, newStatus: string, actorRole: string) {
+    if (!ORDER_STATUS_VALUES.includes(newStatus as OrderStatus)) {
+      throw new Error(
+        `Invalid order status '${newStatus}'. Allowed: ${ORDER_STATUS_VALUES.join(', ')}`
+      );
+    }
+
+    const query = buildOrderQuery(id);
+    const order = await ordersCollection.findOne(query);
+    if (!order) {
+      throw new Error('Order not found.');
+    }
+
+    const actorRoleLower = String(actorRole || '').toLowerCase();
+    const isAdmin = /^(admin|super-admin|super_admin)$/.test(actorRoleLower);
+    const isRestaurant = /restaurant|vendor/i.test(actorRoleLower);
+    const isRider = /rider|delivery|driver/i.test(actorRoleLower);
+
+    if (!isAdmin) {
+      const currentStatus: OrderStatus =
+        (order.status as OrderStatus) || ORDER_STATUS.PENDING;
+
+      const allowedNext = isRestaurant
+        ? RESTAURANT_STATUS_TRANSITIONS[currentStatus] || []
+        : isRider
+          ? RIDER_STATUS_TRANSITIONS[currentStatus] || []
+          : [];
+
+      if (!allowedNext.includes(newStatus as OrderStatus)) {
+        const from = currentStatus;
+        const to = newStatus;
+        throw new Error(
+          isRestaurant || isRider
+            ? `Status cannot move from '${from}' to '${to}' for your role.`
+            : 'You are not authorized to update order status.'
+        );
+      }
+    }
+
+    await ordersCollection.updateOne(query, {
+      $set: {
+        status: newStatus,
+        orderStatus: newStatus,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    return await ordersCollection.findOne(query);
+  }
+
+  /**
+   * Update the rider's live location for an order (PATCH /orders/:id/location).
+   * Stores { lat, lng, updatedAt } as the order's riderLocation.
+   */
+  static async updateRiderLocation(id: string, lat: number, lng: number) {
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
+
+    if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
+      throw new Error('Valid numeric lat and lng are required.');
+    }
+
+    const query = buildOrderQuery(id);
+    const order = await ordersCollection.findOne(query);
+    if (!order) {
+      throw new Error('Order not found.');
+    }
+
+    const now = new Date();
+    await ordersCollection.updateOne(query, {
+      $set: {
+        riderLocation: {
+          lat: parsedLat,
+          lng: parsedLng,
+          updatedAt: now,
+        },
+        updatedAt: now.toISOString(),
+      },
+    });
+
+    return await ordersCollection.findOne(query);
   }
 }
