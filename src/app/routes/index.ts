@@ -9,10 +9,20 @@ import { ContactRoutes } from '../modules/contact/contact.route';
 import { AiRoutes } from '../modules/ai/ai.route';
 import { OrderRoutes } from '../modules/order/order.route';
 import { CategoryRoutes } from '../modules/category/category.route';
+import { SettingsRoutes } from '../modules/settings/settings.route';
+import { CouponRoutes } from '../modules/coupon/coupon.route';
 
 const router: Router = express.Router();
 
 const moduleRoutes = [
+  {
+    path: '/settings',
+    route: SettingsRoutes,
+  },
+  {
+    path: '/coupons',
+    route: CouponRoutes,
+  },
   {
     path: '/categories',
     route: CategoryRoutes,
